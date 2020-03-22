@@ -399,7 +399,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   line: {fileID: 386643004}
-  timeStep: 0.25
+  timeStep: 0.001
 --- !u!120 &386643004
 LineRenderer:
   m_ObjectHideFlags: 0

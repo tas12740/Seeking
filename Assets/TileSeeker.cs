@@ -20,6 +20,7 @@ public class TileSeeker : MonoBehaviour
         ReadyToMove,
         RotateToMove,
         Move,
+        ScanWallStart,
         ScanWall,
         MoveToCorner
     }
@@ -31,10 +32,17 @@ public class TileSeeker : MonoBehaviour
     private float currMoveRotation;
     private float rotationAmountBeforeMove;
 
+    private double originalDirectionBeforeWallScan;
     private bool foundCorner = false;
     private Vector2 cornerLocation = Vector2.zero;
     private bool wentOtherDirection = false;
     private float cornerUpdate = 0f;
+    private float lastCornerDistance;
+    private Vector2 lastCornerSearch;
+    private float currCornerDistance;
+    private Vector2 currCornerSearch;
+    private const float CORNERUPDATENEGATIVE = -0.1f;
+    private const float CORNERUPDATEPOSITIVE = 0.1f;
 
     private double lookingDirection = 0;
     private float currRotation = 0;
@@ -196,96 +204,125 @@ public class TileSeeker : MonoBehaviour
                 bool seesInnerWall = markEdges(new Vector2(this.transform.position.x, this.transform.position.y), hit.point, new Vector2(dir.x, dir.y));
                 if (seesInnerWall)
                 {
-                    this.currMode = Mode.ScanWall;
+                    this.currMode = Mode.ScanWallStart;
                 }
             }
         }
+        else if (this.currMode == Mode.ScanWallStart)
+        {
+            this.scanWallStart();
+            this.currMode = Mode.ScanWall;
+        }
         else if (this.currMode == Mode.ScanWall)
         {
-            int playerMask = ~(1 << 8);
+            this.scanWall();
+        }
+    }
 
-            float xDirLeft = (float)Math.Cos((this.lookingDirection - 0.1f) * Mathf.Deg2Rad);
-            float yDirLeft = (float)Math.Sin((this.lookingDirection - 0.1f) * Mathf.Deg2Rad);
-            Vector3 left = new Vector3(xDirLeft, yDirLeft, 0);
+    private void scanWallStart()
+    {
+        int playerMask = ~(1 << 8);
 
-            float xDirRight = (float)Math.Cos((this.lookingDirection + 0.1f) * Mathf.Deg2Rad);
-            float yDirRight = (float)Math.Sin((this.lookingDirection + 0.1f) * Mathf.Deg2Rad);
-            Vector3 right = new Vector3(xDirRight, yDirRight, 0);
+        float xDirLeft = (float)Math.Cos((this.lookingDirection - 0.1f) * Mathf.Deg2Rad);
+        float yDirLeft = (float)Math.Sin((this.lookingDirection - 0.1f) * Mathf.Deg2Rad);
+        Vector3 left = new Vector3(xDirLeft, yDirLeft, 0);
 
-            RaycastHit2D leftHit = Physics2D.Raycast(this.transform.position, left, Mathf.Infinity, playerMask);
-            RaycastHit2D rightHit = Physics2D.Raycast(this.transform.position, right, Mathf.Infinity, playerMask);
+        float xDirRight = (float)Math.Cos((this.lookingDirection + 0.1f) * Mathf.Deg2Rad);
+        float yDirRight = (float)Math.Sin((this.lookingDirection + 0.1f) * Mathf.Deg2Rad);
+        Vector3 right = new Vector3(xDirRight, yDirRight, 0);
 
-            string tagLeft = leftHit.collider.tag;
-            string tagRight = rightHit.collider.tag;
+        RaycastHit2D leftHit = Physics2D.Raycast(this.transform.position, left, Mathf.Infinity, playerMask);
+        RaycastHit2D rightHit = Physics2D.Raycast(this.transform.position, right, Mathf.Infinity, playerMask);
 
-            RaycastHit2D choice;
+        string tagLeft = leftHit.collider.tag;
+        string tagRight = rightHit.collider.tag;
 
-            if (tagLeft.Equals("Inner") && tagRight.Equals("Inner"))
+        RaycastHit2D choice;
+
+        if (tagLeft.Equals("Inner") && tagRight.Equals("Inner"))
+        {
+            this.cornerUpdate = (leftHit.distance < rightHit.distance) ? -0.1f : 0.1f;
+            choice = (leftHit.distance < rightHit.distance) ? leftHit : rightHit;
+        }
+        else if (tagLeft.Equals("Inner"))
+        {
+            this.cornerUpdate = CORNERUPDATENEGATIVE;
+            choice = leftHit;
+        }
+        else if (tagRight.Equals("Inner"))
+        {
+            this.cornerUpdate = CORNERUPDATEPOSITIVE;
+            choice = rightHit;
+        }
+        else
+        {
+            choice = leftHit;
+            Debug.Break();
+            Application.Quit();
+        }
+
+        this.originalDirectionBeforeWallScan = this.lookingDirection;
+
+        this.foundCorner = false;
+
+        this.lastCornerDistance = choice.distance;
+        this.currCornerDistance = choice.distance;
+
+        this.lastCornerSearch = choice.point;
+        this.currCornerSearch = choice.point;
+
+        this.wentOtherDirection = false;
+    }
+
+    private void scanWall()
+    {
+        int playerMask = ~(1 << 8);
+        if (!this.foundCorner)
+        {
+            this.lookingDirection += this.cornerUpdate;
+
+            this.transform.Rotate(new Vector3(0, 0, this.cornerUpdate));
+
+            float xDir = (float)Math.Cos(this.lookingDirection * Mathf.Deg2Rad);
+            float yDir = (float)Math.Sin(this.lookingDirection * Mathf.Deg2Rad);
+
+            Vector3 dir = new Vector3(xDir, yDir, 0);
+
+            RaycastHit2D hit = Physics2D.Raycast(this.transform.position, dir, Mathf.Infinity, playerMask);
+            this.markEdges(this.transform.position, hit.point, dir);
+
+            this.lastCornerSearch = this.currCornerSearch;
+            this.currCornerSearch = hit.point;
+
+            this.lastCornerDistance = this.currCornerDistance;
+            this.currCornerDistance = hit.distance;
+
+            if (hit.collider.tag.Equals("Outer"))
             {
-                this.cornerUpdate = (leftHit.distance < rightHit.distance) ? -0.1f : 0.1f;
-                choice = (leftHit.distance < rightHit.distance) ? leftHit : rightHit;
-            }
-            else if (tagLeft.Equals("Inner"))
-            {
-                this.cornerUpdate = -0.1f;
-                choice = leftHit;
-            }
-            else if (tagRight.Equals("Inner"))
-            {
-                this.cornerUpdate = 0.1f;
-                choice = rightHit;
-            }
-            else
-            {
-                choice = leftHit;
-                Debug.Break();
-                Application.Quit();
-            }
-
-            double originalDirection = this.lookingDirection;
-            double currDirection = this.lookingDirection;
-            bool hasCorner = false;
-            float lastDistance = choice.distance, currDistance = choice.distance;
-            Vector2 last = choice.point, curr = choice.point;
-
-            while (!hasCorner)
-            {
-                currDirection += this.cornerUpdate;
-                this.transform.Rotate(new Vector3(0, 0, this.cornerUpdate));
-
-                float xDir = (float)Math.Cos(currDirection * Mathf.Deg2Rad);
-                float yDir = (float)Math.Sin(currDirection * Mathf.Deg2Rad);
-
-                Vector3 dir = new Vector3(xDir, yDir, 0);
-
-                RaycastHit2D hit = Physics2D.Raycast(this.transform.position, dir, Mathf.Infinity, playerMask);
-                this.markEdges(this.transform.position, hit.point, dir);
-                last = curr;
-                curr = hit.point;
-
-                lastDistance = currDistance;
-                currDistance = hit.distance;
-                if (hit.collider.tag.Equals("Outer"))
+                Debug.Log($"{this.currCornerDistance}, {this.lastCornerDistance}");
+                if (Mathf.Abs(this.currCornerDistance - this.lastCornerDistance) > 1f)
                 {
-                    Debug.Log($"{currDistance}, {lastDistance}");
-                    if (Mathf.Abs(currDistance - lastDistance) > 1f)
+                    this.foundCorner = true;
+                    this.cornerLocation = this.lastCornerSearch;
+                    Debug.Log(this.cornerLocation);
+
+                    float rotationAmount = (float)(this.originalDirectionBeforeWallScan - this.lookingDirection);
+                    Debug.Log(rotationAmount);
+                    this.transform.Rotate(new Vector3(0, 0, rotationAmount));
+                    Debug.Break();
+                }
+                else
+                {
+                    if (this.wentOtherDirection)
                     {
-                        hasCorner = true;
-                        this.cornerLocation = last;
-                        Debug.Log(this.cornerLocation);
+                        float rotationAmount = (float)(this.originalDirectionBeforeWallScan - this.lookingDirection);
+                        Debug.Log(rotationAmount);
+                        this.transform.Rotate(new Vector3(0, 0, rotationAmount));
                         Debug.Break();
+                        return;
                     }
-                    else
-                    {
-                        if (this.wentOtherDirection)
-                        {
-                            this.transform.Rotate(new Vector3(0, 0, (float)(originalDirection - currDirection)));
-                            Debug.Break();
-                            return;
-                        }
-                        this.cornerUpdate = (Mathf.Abs(this.cornerUpdate - 0.1f) < Mathf.Pow(10, -3)) ? -0.1f : 0.1f;
-                        this.wentOtherDirection = true;
-                    }
+                    this.cornerUpdate = (Mathf.Abs(this.cornerUpdate - CORNERUPDATEPOSITIVE) < Mathf.Pow(10, -3)) ? CORNERUPDATENEGATIVE : CORNERUPDATEPOSITIVE;
+                    this.wentOtherDirection = true;
                 }
             }
         }
@@ -719,8 +756,6 @@ public class TileSeeker : MonoBehaviour
     {
         bool xInt = Mathf.Abs(point.x - Mathf.Round(point.x)) < Mathf.Pow(10, -3);
         bool yInt = Mathf.Abs(point.y - Mathf.Round(point.y)) < Mathf.Pow(10, -3);
-
-        // Debug.Log($"({point.x}, {Mathf.Round(point.x)}, {xInt}), ({point.y}, {Mathf.Round(point.y)}, {yInt})");
 
         if (xInt && yInt)
         {
