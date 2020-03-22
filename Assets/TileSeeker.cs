@@ -397,9 +397,6 @@ public class TileSeeker : MonoBehaviour
         int firstX = Mathf.RoundToInt(first.x);
         int firstY = Mathf.RoundToInt(first.y);
 
-        // Debug.Log($"{point0.x}, {point0.y}");
-        // Debug.Log($"{firstX}, {firstY}");
-
         if (this.isOnInnerWall(point0))
         {
             // Debug.Log("Wall!");
@@ -481,18 +478,20 @@ public class TileSeeker : MonoBehaviour
             if (direction.x > 0)
             {
                 float currX = hit.x;
+                float y = hit.y;
                 while (currX > position.x)
                 {
-                    points.Add(new Vector2(currX, hit.y));
+                    points.Add(new Vector2(currX, y));
                     currX -= 1;
                 }
             }
             else
             {
                 float currX = hit.x;
+                float y = hit.y;
                 while (currX < position.x)
                 {
-                    points.Add(new Vector2(currX, hit.y));
+                    points.Add(new Vector2(currX, y));
                     currX += 1;
                 }
             }
@@ -502,18 +501,20 @@ public class TileSeeker : MonoBehaviour
             if (direction.y > 0)
             {
                 float currY = hit.y;
+                float x = hit.x;
                 while (currY > position.y)
                 {
-                    points.Add(new Vector2(hit.x, currY));
+                    points.Add(new Vector2(x, currY));
                     currY -= 1;
                 }
             }
             else
             {
                 float currY = hit.y;
+                float x = hit.x;
                 while (currY < position.y)
                 {
-                    points.Add(new Vector2(hit.x, currY));
+                    points.Add(new Vector2(x, currY));
                     currY += 1;
                 }
             }
@@ -528,8 +529,8 @@ public class TileSeeker : MonoBehaviour
                 while (currX > position.x && currY < position.y)
                 {
                     points.Add(new Vector2(currX, currY));
-                    currX -= 1;
-                    currY += 1;
+                    currX -= 0.5f;
+                    currY += 0.5f;
                 }
             }
             else if (direction.x > 0 && direction.y > 0)
@@ -537,8 +538,8 @@ public class TileSeeker : MonoBehaviour
                 while (currX > position.x && currY > position.y)
                 {
                     points.Add(new Vector2(currX, currY));
-                    currX -= 1;
-                    currY -= 1;
+                    currX -= 0.5f;
+                    currY -= 0.5f;
                 }
             }
             else if (direction.x < 0 && currY < position.y)
@@ -546,8 +547,8 @@ public class TileSeeker : MonoBehaviour
                 while (currX < position.x && currY < position.y)
                 {
                     points.Add(new Vector2(currX, currY));
-                    currX += 1;
-                    currY += 1;
+                    currX += 0.5f;
+                    currY += 0.5f;
                 }
             }
             else
@@ -555,8 +556,8 @@ public class TileSeeker : MonoBehaviour
                 while (currX < position.x && currY > position.y)
                 {
                     points.Add(new Vector2(currX, currY));
-                    currX += 1;
-                    currY -= 1;
+                    currX += 0.5f;
+                    currY -= 0.5f;
                 }
             }
         }
@@ -752,18 +753,8 @@ public class TileSeeker : MonoBehaviour
         }
         else
         {
-            float floorX = Mathf.Floor(point.x) + 4, ceilX = Mathf.Ceil(point.x) + 4;
-            float lowCol = Mathf.Min(floorX, ceilX);
-            float highCol = Mathf.Max(floorX, ceilX);
-
-            float floorY = -Mathf.Floor(point.y) + 3, ceilY = -Mathf.Ceil(point.y) + 3;
-            float lowRow = Mathf.Min(floorY, ceilY);
-            float highRow = Mathf.Max(floorY, ceilY);
-
-            float lowNode = this.mapNode(lowCol, lowRow);
-            float highNode = this.mapNode(highCol, highRow);
-
-            return new Vector2(lowNode, highNode);
+            // edge case
+            return Vector2.zero;
         }
     }
 
