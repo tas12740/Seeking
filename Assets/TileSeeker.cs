@@ -56,6 +56,7 @@ public class TileSeeker : MonoBehaviour
     private Map[,] edges;
     private bool[,] blockGraph;
     public float timeStep = 1f;
+    public float timeeStepScanWall;
     private float timer = 0f;
     private System.Random random;
     private Dictionary<int, bool> locationMap;
@@ -163,10 +164,21 @@ public class TileSeeker : MonoBehaviour
         line.SetPosition(1, ray.origin + ray.direction);
 
         this.timer += Time.deltaTime;
-        if (this.timer > this.timeStep)
+        if (this.currMode == Mode.ScanWall)
         {
-            doUpdate();
-            this.timer = 0;
+            if (this.timer > this.timeeStepScanWall)
+            {
+                doUpdate();
+                this.timer = 0;
+            }
+        }
+        else
+        {
+            if (this.timer > this.timeStep)
+            {
+                doUpdate();
+                this.timer = 0;
+            }
         }
     }
 
