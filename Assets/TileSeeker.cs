@@ -22,7 +22,8 @@ public class TileSeeker : MonoBehaviour
         Move,
         ScanWallStart,
         ScanWall,
-        MoveToCorner
+        MoveToCorner,
+        FindCorner
     }
     private Mode currMode;
 
@@ -32,6 +33,9 @@ public class TileSeeker : MonoBehaviour
     private float currMoveRotation;
     private float rotationAmountBeforeMove;
 
+    ////////////////////////////////////////
+    // WALL SCANNING VARIABLES           //
+    //////////////////////////////////////
     private double originalDirectionBeforeWallScan;
     private bool foundCorner = false;
     private Vector2 cornerLocation = Vector2.zero;
@@ -217,6 +221,153 @@ public class TileSeeker : MonoBehaviour
         {
             this.scanWall();
         }
+        else if (this.currMode == Mode.FindCorner)
+        {
+            this.findCorner();
+        }
+    }
+
+    private void findCorner()
+    {
+        Vector2 nodeLocation = this.closestNode(this.cornerLocation);
+        float node = Mathf.Round(this.mapNode(nodeLocation.y, nodeLocation.x));
+        ArrayList edges = this.edgesForNode(node);
+
+        Vector2 top = (Vector2)edges[0];
+        Vector2 right = (Vector2)edges[1];
+        Vector2 left = (Vector2)edges[2];
+        Vector2 down = (Vector2)edges[3];
+
+        Map topMap = this.edges[Mathf.RoundToInt(top.x), Mathf.RoundToInt(top.y)];
+        Map rightMap = this.edges[Mathf.RoundToInt(right.x), Mathf.RoundToInt(right.y)];
+        Map leftMap = this.edges[Mathf.RoundToInt(left.x), Mathf.RoundToInt(left.y)];
+        Map downMap = this.edges[Mathf.RoundToInt(down.x), Mathf.RoundToInt(down.y)];
+
+        HashSet<int> blocks = this.openBlocks(cornerLocation, topMap, leftMap, rightMap, downMap);
+
+        Debug.Log("Blocks: ");
+        foreach (int obj in blocks)
+        {
+            Debug.Log(obj);
+        }
+
+        Debug.Break();
+    }
+
+    private HashSet<int> openBlocks(Vector2 cornerLocation, Map topMap, Map leftMap, Map rightMap, Map downMap)
+    {
+        HashSet<int> blocks = new HashSet<int>();
+
+        if (leftMap == Map.InnerWall)
+        {
+            if (topMap == Map.Seen)
+            {
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x - 0.5f, this.cornerLocation.y + 0.5f)));
+            }
+            if (downMap == Map.Seen)
+            {
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x - 0.5f, this.cornerLocation.y - 0.5f)));
+            }
+            if (rightMap == Map.Seen)
+            {
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x + 0.5f, this.cornerLocation.y - 0.5f)));
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x + 0.5f, this.cornerLocation.y + 0.5f)));
+            }
+        }
+        if (rightMap == Map.InnerWall)
+        {
+            if (topMap == Map.Seen)
+            {
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x + 0.5f, this.cornerLocation.y + 0.5f)));
+            }
+            if (downMap == Map.Seen)
+            {
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x + 0.5f, this.cornerLocation.y - 0.5f)));
+            }
+            if (leftMap == Map.Seen)
+            {
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x - 0.5f, this.cornerLocation.y + 0.5f)));
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x - 0.5f, this.cornerLocation.y - 0.5f)));
+            }
+        }
+        if (topMap == Map.InnerWall)
+        {
+            if (rightMap == Map.Seen)
+            {
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x + 0.5f, this.cornerLocation.y + 0.5f)));
+            }
+            if (leftMap == Map.Seen)
+            {
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x - 0.5f, this.cornerLocation.y + 0.5f)));
+            }
+            if (downMap == Map.Seen)
+            {
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x - 0.5f, this.cornerLocation.y - 0.5f)));
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x + 0.5f, this.cornerLocation.y - 0.5f)));
+            }
+        }
+        if (downMap == Map.InnerWall)
+        {
+            if (rightMap == Map.Seen)
+            {
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x + 0.5f, this.cornerLocation.y - 0.5f)));
+            }
+            if (leftMap == Map.Seen)
+            {
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x - 0.5f, this.cornerLocation.y - 0.5f)));
+            }
+            if (topMap == Map.Seen)
+            {
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x - 0.5f, this.cornerLocation.y + 0.5f)));
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x + 0.5f, this.cornerLocation.y + 0.5f)));
+            }
+        }
+
+        return blocks;
+    }
+
+    private ArrayList edgesForNode(float node)
+    {
+        ArrayList edges = new ArrayList();
+        int intNode = Mathf.RoundToInt(node);
+        if (!(intNode >= 0 && intNode <= 5))
+        {
+            edges.Add(new Vector2(node - 6, node));
+        }
+        else
+        {
+            edges.Add(Vector2.zero);
+        }
+        if (!(intNode == 5 || intNode == 11 || intNode == 17 || intNode == 29 || intNode == 35))
+        {
+            edges.Add(new Vector2(node, node + 1));
+        }
+        else
+        {
+            edges.Add(Vector2.zero);
+        }
+        if (!(intNode == 0 || intNode == 6 || intNode == 12 || intNode == 18 || intNode == 24 || intNode == 30))
+        {
+            edges.Add(new Vector2(node - 1, node));
+        }
+        else
+        {
+            edges.Add(Vector2.zero);
+        }
+        if (!(intNode >= 30 && intNode <= 35))
+        {
+            edges.Add(new Vector2(node, node + 6));
+        }
+        else
+        {
+            edges.Add(Vector2.zero);
+        }
+        return edges;
+    }
+
+    private Vector2 closestNode(Vector2 location)
+    {
+        return new Vector2(location.x + 4, -location.y + 3);
     }
 
     private void scanWallStart()
@@ -277,53 +428,52 @@ public class TileSeeker : MonoBehaviour
     private void scanWall()
     {
         int playerMask = ~(1 << 8);
-        if (!this.foundCorner)
+
+        this.lookingDirection += this.cornerUpdate;
+
+        this.transform.Rotate(new Vector3(0, 0, this.cornerUpdate));
+
+        float xDir = (float)Math.Cos(this.lookingDirection * Mathf.Deg2Rad);
+        float yDir = (float)Math.Sin(this.lookingDirection * Mathf.Deg2Rad);
+
+        Vector3 dir = new Vector3(xDir, yDir, 0);
+
+        RaycastHit2D hit = Physics2D.Raycast(this.transform.position, dir, Mathf.Infinity, playerMask);
+        this.markEdges(this.transform.position, hit.point, dir);
+
+        this.lastCornerSearch = this.currCornerSearch;
+        this.currCornerSearch = hit.point;
+
+        this.lastCornerDistance = this.currCornerDistance;
+        this.currCornerDistance = hit.distance;
+
+        if (hit.collider.tag.Equals("Outer"))
         {
-            this.lookingDirection += this.cornerUpdate;
-
-            this.transform.Rotate(new Vector3(0, 0, this.cornerUpdate));
-
-            float xDir = (float)Math.Cos(this.lookingDirection * Mathf.Deg2Rad);
-            float yDir = (float)Math.Sin(this.lookingDirection * Mathf.Deg2Rad);
-
-            Vector3 dir = new Vector3(xDir, yDir, 0);
-
-            RaycastHit2D hit = Physics2D.Raycast(this.transform.position, dir, Mathf.Infinity, playerMask);
-            this.markEdges(this.transform.position, hit.point, dir);
-
-            this.lastCornerSearch = this.currCornerSearch;
-            this.currCornerSearch = hit.point;
-
-            this.lastCornerDistance = this.currCornerDistance;
-            this.currCornerDistance = hit.distance;
-
-            if (hit.collider.tag.Equals("Outer"))
+            Debug.Log($"{this.currCornerDistance}, {this.lastCornerDistance}");
+            if (Mathf.Abs(this.currCornerDistance - this.lastCornerDistance) > 1f)
             {
-                Debug.Log($"{this.currCornerDistance}, {this.lastCornerDistance}");
-                if (Mathf.Abs(this.currCornerDistance - this.lastCornerDistance) > 1f)
-                {
-                    this.foundCorner = true;
-                    this.cornerLocation = this.lastCornerSearch;
-                    Debug.Log(this.cornerLocation);
+                this.foundCorner = true;
+                this.cornerLocation = this.lastCornerSearch;
+                Debug.Log(this.cornerLocation);
 
+                float rotationAmount = (float)(this.originalDirectionBeforeWallScan - this.lookingDirection);
+                this.transform.Rotate(new Vector3(0, 0, rotationAmount));
+
+                this.currMode = Mode.FindCorner;
+                return;
+            }
+            else
+            {
+                if (this.wentOtherDirection)
+                {
                     float rotationAmount = (float)(this.originalDirectionBeforeWallScan - this.lookingDirection);
                     Debug.Log(rotationAmount);
                     this.transform.Rotate(new Vector3(0, 0, rotationAmount));
                     Debug.Break();
+                    return;
                 }
-                else
-                {
-                    if (this.wentOtherDirection)
-                    {
-                        float rotationAmount = (float)(this.originalDirectionBeforeWallScan - this.lookingDirection);
-                        Debug.Log(rotationAmount);
-                        this.transform.Rotate(new Vector3(0, 0, rotationAmount));
-                        Debug.Break();
-                        return;
-                    }
-                    this.cornerUpdate = (Mathf.Abs(this.cornerUpdate - CORNERUPDATEPOSITIVE) < Mathf.Pow(10, -3)) ? CORNERUPDATENEGATIVE : CORNERUPDATEPOSITIVE;
-                    this.wentOtherDirection = true;
-                }
+                this.cornerUpdate = (Mathf.Abs(this.cornerUpdate - CORNERUPDATEPOSITIVE) < Mathf.Pow(10, -3)) ? CORNERUPDATENEGATIVE : CORNERUPDATEPOSITIVE;
+                this.wentOtherDirection = true;
             }
         }
     }
