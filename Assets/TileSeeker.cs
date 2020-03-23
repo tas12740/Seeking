@@ -47,12 +47,14 @@ public class TileSeeker : MonoBehaviour
     private Vector2 currCornerSearch;
     private const float CORNERUPDATENEGATIVE = -0.1f;
     private const float CORNERUPDATEPOSITIVE = 0.1f;
+    private Stack path = new Stack();
 
     private double lookingDirection = 0;
     private float currRotation = 0;
     private bool didRotate = false;
     public LineRenderer line;
     private Map[,] edges;
+    private bool[,] blockGraph;
     public float timeStep = 1f;
     private float timer = 0f;
     private System.Random random;
@@ -113,6 +115,33 @@ public class TileSeeker : MonoBehaviour
             edges[i + 1, i] = Map.OuterWall;
         }
 
+        this.blockGraph = new bool[25, 25];
+        for (int i = 0; i <= 24; i++)
+        {
+            if (!(i == 4 || i == 9 || i == 14 || i == 19 || i == 24))
+            {
+                blockGraph[i, i + 1] = true;
+                blockGraph[i + 1, i] = true;
+
+                if (i < 20)
+                {
+                    blockGraph[i, i + 6] = true;
+                    blockGraph[i + 6, i] = true;
+                }
+
+                if (i > 4)
+                {
+                    blockGraph[i, i - 4] = true;
+                    blockGraph[i - 4, i] = true;
+                }
+            }
+            if (i < 20)
+            {
+                blockGraph[i, i + 5] = true;
+                blockGraph[i + 5, i] = true;
+            }
+        }
+
         this.locationMap = new Dictionary<int, bool>();
         for (int i = 0; i < 25; i++)
         {
@@ -150,7 +179,15 @@ public class TileSeeker : MonoBehaviour
         else if (this.currMode == Mode.Move)
         {
             this.move();
-            this.currMode = Mode.Scan;
+            if (this.path.Count == 0)
+            {
+                this.currMode = Mode.Scan;
+            }
+            else
+            {
+                // move again
+                this.currMode = Mode.ReadyToMove;
+            }
         }
         else if (this.currMode == Mode.ReadyToMove)
         {
@@ -243,18 +280,82 @@ public class TileSeeker : MonoBehaviour
         Map leftMap = this.edges[Mathf.RoundToInt(left.x), Mathf.RoundToInt(left.y)];
         Map downMap = this.edges[Mathf.RoundToInt(down.x), Mathf.RoundToInt(down.y)];
 
-        HashSet<int> blocks = this.openBlocks(cornerLocation, topMap, leftMap, rightMap, downMap);
+        ArrayList blocks = this.openBlocks(cornerLocation, topMap, leftMap, rightMap, downMap);
 
-        Debug.Log("Blocks: ");
-        foreach (int obj in blocks)
-        {
-            Debug.Log(obj);
-        }
+        // Debug.Log("Blocks: ");
+        // foreach (int obj in blocks)
+        // {
+        //     Debug.Log(obj);
+        // }
+        int blockChoice = (int)blocks[this.random.Next(blocks.Count)];
+        // Debug.Log($"Block choice: {blockChoice}");
 
-        Debug.Break();
+        this.generatePath(this.mapCoordinatesToBlock(this.transform.position), blockChoice);
+        // foreach (System.Object obj in this.path)
+        // {
+        //     Debug.Log(obj);
+        // }
+
+        this.currMode = Mode.ReadyToMove;
     }
 
-    private HashSet<int> openBlocks(Vector2 cornerLocation, Map topMap, Map leftMap, Map rightMap, Map downMap)
+    private void generatePath(int currBlock, int endBlock)
+    {
+        this.path.Clear();
+
+        Queue<int> searchQueue = new Queue<int>();
+
+        bool[] visited = new bool[25];
+        for (int i = 0; i < visited.Length; i++)
+        {
+            visited[i] = false;
+        }
+
+        int[] distances = new int[25];
+        for (int i = 0; i < distances.Length; i++)
+        {
+            distances[i] = int.MaxValue;
+        }
+        distances[currBlock] = 0;
+
+        int[] previous = new int[25];
+        for (int i = 0; i < previous.Length; i++)
+        {
+            previous[i] = int.MaxValue;
+        }
+
+        searchQueue.Enqueue(currBlock);
+        while (searchQueue.Count != 0)
+        {
+            int curr = searchQueue.Dequeue();
+            // Debug.Log($"Searching: {curr}");
+            visited[curr] = true;
+            for (int i = 0; i < this.blockGraph.GetLength(0); i++)
+            {
+                if (this.blockGraph[curr, i])
+                {
+                    if (!visited[i])
+                    {
+                        distances[i] = distances[curr] + 1;
+                        previous[i] = curr;
+                        visited[i] = true;
+                        searchQueue.Enqueue(i);
+                    }
+                }
+            }
+        }
+
+        int currItem = previous[endBlock];
+        this.path.Push(endBlock);
+        while (currItem != int.MaxValue)
+        {
+            this.path.Push(currItem);
+            currItem = previous[currItem];
+        }
+        this.path.Pop();
+    }
+
+    private ArrayList openBlocks(Vector2 cornerLocation, Map topMap, Map leftMap, Map rightMap, Map downMap)
     {
         HashSet<int> blocks = new HashSet<int>();
 
@@ -323,7 +424,13 @@ public class TileSeeker : MonoBehaviour
             }
         }
 
-        return blocks;
+        ArrayList res = new ArrayList();
+        foreach (int i in blocks)
+        {
+            res.Add(i);
+        }
+
+        return res;
     }
 
     private ArrayList edgesForNode(float node)
@@ -457,6 +564,7 @@ public class TileSeeker : MonoBehaviour
                 Debug.Log(this.cornerLocation);
 
                 float rotationAmount = (float)(this.originalDirectionBeforeWallScan - this.lookingDirection);
+                this.lookingDirection = this.originalDirectionBeforeWallScan;
                 this.transform.Rotate(new Vector3(0, 0, rotationAmount));
 
                 this.currMode = Mode.FindCorner;
@@ -467,7 +575,7 @@ public class TileSeeker : MonoBehaviour
                 if (this.wentOtherDirection)
                 {
                     float rotationAmount = (float)(this.originalDirectionBeforeWallScan - this.lookingDirection);
-                    Debug.Log(rotationAmount);
+                    this.lookingDirection = this.originalDirectionBeforeWallScan;
                     this.transform.Rotate(new Vector3(0, 0, rotationAmount));
                     Debug.Break();
                     return;
@@ -480,39 +588,56 @@ public class TileSeeker : MonoBehaviour
 
     private void readyToMove()
     {
-        int playerMask = ~(1 << 8);
-
-        ArrayList options = new ArrayList();
-        for (int x = -1; x <= 1; x++)
+        if (this.path.Count == 0)
         {
-            for (int y = -1; y <= 1; y++)
+            int playerMask = ~(1 << 8);
+
+            ArrayList options = new ArrayList();
+            for (int x = -1; x <= 1; x++)
             {
-                if (canMove(this.transform.position, new Vector3((float)x, (float)y, 0), playerMask))
+                for (int y = -1; y <= 1; y++)
                 {
-                    options.Add((x, y));
+                    if (canMove(this.transform.position, new Vector3((float)x, (float)y, 0), playerMask))
+                    {
+                        options.Add((x, y));
+                    }
                 }
             }
-        }
 
-        if (options.Count == 0)
+            if (options.Count == 0)
+            {
+                Debug.Break();
+                Application.Quit();
+            }
+
+            (int, int) tup = ((int, int))options[this.random.Next(0, options.Count)];
+
+            float xDiff = (float)tup.Item1;
+            float yDiff = (float)tup.Item2;
+            Vector3 dir = new Vector3(xDiff, yDiff, 0);
+
+            float xDir = (float)Math.Cos(this.lookingDirection * Mathf.Deg2Rad);
+            float yDir = (float)Math.Sin(this.lookingDirection * Mathf.Deg2Rad);
+            Vector3 angle = new Vector3(xDir, yDir, 0);
+
+            this.rotationAmountBeforeMove = Vector2.SignedAngle(angle, dir);
+            this.moveRotation = (this.rotationAmountBeforeMove > 0) ? 45 : -45;
+            this.currMoveRotation = 0f;
+        }
+        else
         {
-            Debug.Break();
-            Application.Quit();
+            Vector2 location = this.mapBlockToCoordinates((int)this.path.Peek()) - new Vector2(this.transform.position.x, this.transform.position.y);
+
+            float xDir = (float)Math.Cos(this.lookingDirection * Mathf.Deg2Rad);
+            float yDir = (float)Math.Sin(this.lookingDirection * Mathf.Deg2Rad);
+            Vector3 angle = new Vector3(xDir, yDir, 0);
+
+            this.rotationAmountBeforeMove = Vector2.SignedAngle(angle, location);
+
+            Debug.Log($"{this.lookingDirection} {angle} {location} {this.rotationAmountBeforeMove}");
+            this.moveRotation = (this.rotationAmountBeforeMove > 0) ? 45 : -45;
+            this.currMoveRotation = 0f;
         }
-
-        (int, int) tup = ((int, int))options[this.random.Next(0, options.Count)];
-
-        float xDiff = (float)tup.Item1;
-        float yDiff = (float)tup.Item2;
-        Vector3 dir = new Vector3(xDiff, yDiff, 0);
-
-        float xDir = (float)Math.Cos(this.lookingDirection * Mathf.Deg2Rad);
-        float yDir = (float)Math.Sin(this.lookingDirection * Mathf.Deg2Rad);
-        Vector3 angle = new Vector3(xDir, yDir, 0);
-
-        this.rotationAmountBeforeMove = Vector2.SignedAngle(angle, dir);
-        this.moveRotation = (this.rotationAmountBeforeMove > 0) ? 45 : -45;
-        this.currMoveRotation = 0f;
     }
 
     private bool canMove(Vector3 currPosition, Vector3 dir, int mask)
@@ -531,7 +656,15 @@ public class TileSeeker : MonoBehaviour
 
     private void move()
     {
-        this.transform.position = this.transform.position + this.movement();
+        if (this.path.Count == 0)
+        {
+            this.transform.position = this.transform.position + this.movement();
+        }
+        else
+        {
+            Vector2 location = this.mapBlockToCoordinates((int)this.path.Pop());
+            this.transform.position = new Vector3(location.x, location.y, 0);
+        }
     }
 
     private void rotateToMove()
@@ -545,6 +678,7 @@ public class TileSeeker : MonoBehaviour
             return;
         }
         this.lookingDirection += this.moveRotation;
+        Debug.Log($"Looking in: {this.lookingDirection}");
         this.transform.Rotate(new Vector3(0, 0, this.moveRotation));
         this.currMoveRotation += this.moveRotation;
     }
@@ -565,11 +699,11 @@ public class TileSeeker : MonoBehaviour
 
         ArrayList points = this.generatePointsOnPath(position, hit, direction);
 
-        Debug.Log("Points:");
-        foreach (Vector2 vec in points)
-        {
-            Debug.Log($"{vec} {this.mapPointToEdge(vec)}");
-        }
+        // Debug.Log("Points:");
+        // foreach (Vector2 vec in points)
+        // {
+        //     Debug.Log($"{vec} {this.mapPointToEdge(vec)}");
+        // }
 
         if (points.Count == 0)
         {
@@ -836,6 +970,29 @@ public class TileSeeker : MonoBehaviour
         return (point.x >= xMin && point.x <= xMax && point.y >= yMin && point.y <= yMax);
     }
 
+    private (int, int) mapEdgeToBlocks(int nodeOne, int nodeTwo)
+    {
+        int minNode = Mathf.RoundToInt(Mathf.Min(nodeOne, nodeTwo));
+        int maxNode = Mathf.RoundToInt(Mathf.Max(nodeOne, nodeTwo));
+
+        // see if horizontal (i, i+1) or vertical (i, i+5)
+        bool horizontal = (maxNode - minNode) == 6;
+
+        if (horizontal)
+        {
+            int colBarrier = minNode % 6;
+            int row = (maxNode / 6) - 1;
+
+            return ((row * 5 + (colBarrier - 1)), row * 5 + colBarrier);
+        }
+        else
+        {
+            int row = (minNode / 6) - 1;
+            int col = (maxNode % 6) - 1;
+            return ((row * 5 + col), (row * 5 + col + 5));
+        }
+    }
+
     private void classifyEdge(Vector2 edgeOne, Vector2 edgeTwo, bool diag, bool isWall)
     {
         if (isWall)
@@ -875,6 +1032,10 @@ public class TileSeeker : MonoBehaviour
                 this.drawEdge(this.mapEdge(x, y), Color.red);
                 this.edges[x, y] = Map.InnerWall;
                 this.edges[y, x] = Map.InnerWall;
+
+                (int nodeOne, int nodeTwo) = this.mapEdgeToBlocks(x, y);
+                this.blockGraph[nodeOne, nodeTwo] = false;
+                this.blockGraph[nodeTwo, nodeOne] = false;
             }
             return;
         }
