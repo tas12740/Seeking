@@ -45,8 +45,8 @@ public class TileSeeker : MonoBehaviour
     private Vector2 lastCornerSearch;
     private float currCornerDistance;
     private Vector2 currCornerSearch;
-    private const float CORNERUPDATENEGATIVE = -0.1f;
-    private const float CORNERUPDATEPOSITIVE = 0.1f;
+    private const float CORNERUPDATENEGATIVE = -1f;
+    private const float CORNERUPDATEPOSITIVE = 1f;
     private Stack path = new Stack();
 
     private double lookingDirection = 0;
@@ -577,7 +577,8 @@ public class TileSeeker : MonoBehaviour
                     float rotationAmount = (float)(this.originalDirectionBeforeWallScan - this.lookingDirection);
                     this.lookingDirection = this.originalDirectionBeforeWallScan;
                     this.transform.Rotate(new Vector3(0, 0, rotationAmount));
-                    Debug.Break();
+
+                    this.currMode = Mode.Scan;
                     return;
                 }
                 this.cornerUpdate = (Mathf.Abs(this.cornerUpdate - CORNERUPDATEPOSITIVE) < Mathf.Pow(10, -3)) ? CORNERUPDATENEGATIVE : CORNERUPDATEPOSITIVE;
@@ -678,7 +679,6 @@ public class TileSeeker : MonoBehaviour
             return;
         }
         this.lookingDirection += this.moveRotation;
-        Debug.Log($"Looking in: {this.lookingDirection}");
         this.transform.Rotate(new Vector3(0, 0, this.moveRotation));
         this.currMoveRotation += this.moveRotation;
     }
