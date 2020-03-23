@@ -565,11 +565,11 @@ public class TileSeeker : MonoBehaviour
 
         ArrayList points = this.generatePointsOnPath(position, hit, direction);
 
-        // Debug.Log("Points:");
-        // foreach (Vector2 vec in points)
-        // {
-        //     Debug.Log($"{vec} {this.mapPointToEdge(vec)}");
-        // }
+        Debug.Log("Points:");
+        foreach (Vector2 vec in points)
+        {
+            Debug.Log($"{vec} {this.mapPointToEdge(vec)}");
+        }
 
         if (points.Count == 0)
         {
@@ -659,6 +659,7 @@ public class TileSeeker : MonoBehaviour
 
     private ArrayList generatePointsOnPath(Vector2 position, Vector2 hit, Vector2 direction)
     {
+        // Debug.Log($"({position.x}, {position.y}) -> ({hit.x}, {hit.y}), {direction}");
         ArrayList points = new ArrayList();
         if (Mathf.Abs(direction.y) < Mathf.Pow(10, -3))
         {
@@ -708,47 +709,131 @@ public class TileSeeker : MonoBehaviour
         }
         else
         {
-            float currX = hit.x;
-            float currY = hit.y;
-            // we are on a corner
-            if (direction.x > 0 && direction.y < 0)
+            // find the equation for the line
+            float slope = (hit.y - position.y) / (hit.x - position.x);
+            float intercept = ((hit.y - slope * hit.x) + (position.y - slope * position.x)) / 2;
+
+            float epsilon = Mathf.Pow(10, -3);
+
+            for (float x = -4; x <= 1; x++)
             {
-                while (currX > position.x && currY < position.y)
+                float currY = slope * x + intercept;
+                if (currY > 3 || currY < -2)
                 {
-                    points.Add(new Vector2(currX, currY));
-                    currX -= 0.5f;
-                    currY += 0.5f;
+                    continue;
+                }
+                Vector2 point = new Vector2(x, currY);
+                if (pointIsOnLineSegment(position, hit, point))
+                {
+                    bool add = true;
+
+                    int n = points.Count;
+                    for (int i = 0; i < n; i++)
+                    {
+                        Vector2 curr = (Vector2)points[i];
+                        if (Mathf.Abs(curr.x - point.x) < epsilon && Mathf.Abs(curr.y - point.y) < epsilon)
+                        {
+                            add = false;
+                            break;
+                        }
+                    }
+
+                    if (add)
+                    {
+                        points.Add(point);
+                    }
                 }
             }
-            else if (direction.x > 0 && direction.y > 0)
+            for (float y = -2; y <= 3; y++)
             {
-                while (currX > position.x && currY > position.y)
+                float currX = (y - intercept) / slope;
+                if (currX < -4 || currX > 1)
                 {
-                    points.Add(new Vector2(currX, currY));
-                    currX -= 0.5f;
-                    currY -= 0.5f;
+                    continue;
+                }
+                Vector2 point = new Vector2(currX, y);
+                if (pointIsOnLineSegment(position, hit, point))
+                {
+                    bool add = true;
+
+                    int n = points.Count;
+                    for (int i = 0; i < n; i++)
+                    {
+                        Vector2 curr = (Vector2)points[i];
+                        if (Mathf.Abs(curr.x - point.x) < epsilon && Mathf.Abs(curr.y - point.y) < epsilon)
+                        {
+                            add = false;
+                            break;
+                        }
+                    }
+
+                    if (add)
+                    {
+                        points.Add(point);
+                    }
                 }
             }
-            else if (direction.x < 0 && currY < position.y)
-            {
-                while (currX < position.x && currY < position.y)
-                {
-                    points.Add(new Vector2(currX, currY));
-                    currX += 0.5f;
-                    currY += 0.5f;
-                }
-            }
-            else
-            {
-                while (currX < position.x && currY > position.y)
-                {
-                    points.Add(new Vector2(currX, currY));
-                    currX += 0.5f;
-                    currY -= 0.5f;
-                }
-            }
+
+            this.sortPoints(points, direction);
         }
         return points;
+    }
+
+    private void sortPoints(ArrayList points, Vector2 direction)
+    {
+        // not actually too complex since all y's have distinct x's
+        if (direction.y > 0)
+        {
+            // going up sort in decreasing order by y position
+            int n = points.Count;
+            for (int i = 0; i < n - 1; i++)
+            {
+                int maxIdx = i;
+                for (int j = i + 1; j < n; j++)
+                {
+                    if (((Vector2)points[j]).y > ((Vector2)points[maxIdx]).y)
+                    {
+                        maxIdx = j;
+                    }
+                }
+
+                Vector2 temp = (Vector2)points[maxIdx];
+                points[maxIdx] = points[i];
+                points[i] = temp;
+            }
+        }
+        else
+        {
+            int n = points.Count;
+            for (int i = 0; i < n - 1; i++)
+            {
+                int minIdx = i;
+                for (int j = i + 1; j < n; j++)
+                {
+                    if (((Vector2)points[j]).y < ((Vector2)points[minIdx]).y)
+                    {
+                        minIdx = j;
+                    }
+                }
+
+                Vector2 temp = (Vector2)points[minIdx];
+                points[minIdx] = points[i];
+                points[i] = temp;
+            }
+        }
+    }
+
+    private bool pointIsOnLineSegment(Vector2 x1y1, Vector2 x2y2, Vector2 point)
+    {
+        float epsilon = Mathf.Pow(10, -3);
+
+        float xMin = Mathf.Min(x1y1.x, x2y2.x) - epsilon;
+        float xMax = Mathf.Max(x1y1.x, x2y2.x) + epsilon;
+
+        float yMin = Mathf.Min(x1y1.y, x2y2.y) - epsilon;
+        float yMax = Mathf.Max(x1y1.y, x2y2.y) + epsilon;
+
+        return (point.x >= xMin && point.x <= xMax && point.y >= yMin && point.y <= yMax);
     }
 
     private void classifyEdge(Vector2 edgeOne, Vector2 edgeTwo, bool diag, bool isWall)
