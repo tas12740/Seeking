@@ -36,8 +36,10 @@ public class TileSeeker : MonoBehaviour
     ////////////////////////////////////////
     // WALL SCANNING VARIABLES           //
     //////////////////////////////////////
+    private List<(Vector2, Vector2)> walls = new List<(Vector2, Vector2)>();
+    private Vector2 otherCorner = Vector2.zero;
     private double originalDirectionBeforeWallScan;
-    private bool foundCorner = false;
+    private HashSet<Vector2> cornersSeen = new HashSet<Vector2>();
     private Vector2 cornerLocation = Vector2.zero;
     private bool wentOtherDirection = false;
     private float cornerUpdate = 0f;
@@ -124,17 +126,17 @@ public class TileSeeker : MonoBehaviour
                 blockGraph[i, i + 1] = true;
                 blockGraph[i + 1, i] = true;
 
-                // if (i < 20)
-                // {
-                //     blockGraph[i, i + 6] = true;
-                //     blockGraph[i + 6, i] = true;
-                // }
+                if (i < 20)
+                {
+                    blockGraph[i, i + 6] = true;
+                    blockGraph[i + 6, i] = true;
+                }
 
-                // if (i > 4)
-                // {
-                //     blockGraph[i, i - 4] = true;
-                //     blockGraph[i - 4, i] = true;
-                // }
+                if (i > 4)
+                {
+                    blockGraph[i, i - 4] = true;
+                    blockGraph[i - 4, i] = true;
+                }
             }
             if (i < 20)
             {
@@ -294,19 +296,10 @@ public class TileSeeker : MonoBehaviour
 
         ArrayList blocks = this.openBlocks(cornerLocation, topMap, leftMap, rightMap, downMap);
 
-        // Debug.Log("Blocks: ");
-        // foreach (int obj in blocks)
-        // {
-        //     Debug.Log(obj);
-        // }
         int blockChoice = (int)blocks[this.random.Next(blocks.Count)];
         Debug.Log($"Block choice: {blockChoice}");
 
         this.generatePath(this.mapCoordinatesToBlock(this.transform.position), blockChoice);
-        // foreach (System.Object obj in this.path)
-        // {
-        //     Debug.Log(obj);
-        // }
 
         this.currMode = Mode.ReadyToMove;
     }
@@ -371,68 +364,79 @@ public class TileSeeker : MonoBehaviour
     {
         HashSet<int> blocks = new HashSet<int>();
 
+        int countUnknown = 0;
+        foreach (Map map in new Map[] { topMap, leftMap, rightMap, downMap })
+        {
+            if (map == Map.Unknown)
+            {
+                countUnknown++;
+            }
+        }
+        if (countUnknown >= 2)
+        {
+            ArrayList empty = new ArrayList();
+            return empty;
+        }
+
+        float x = Mathf.Round(cornerLocation.x);
+        float y = Mathf.Round(cornerLocation.y);
         if (leftMap == Map.InnerWall)
         {
-            if (topMap == Map.Seen)
+            if (topMap == Map.Seen && rightMap == Map.Seen)
             {
-                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x - 0.5f, this.cornerLocation.y + 0.5f)));
+                this.classifyEdge(this.mapPointToEdge(new Vector2(x, y - 0.5f)), Vector2.one, Vector2.left, false, true);
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y - 0.5f)));
             }
-            if (downMap == Map.Seen)
+            else if (downMap == Map.Seen && rightMap == Map.Seen)
             {
-                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x - 0.5f, this.cornerLocation.y - 0.5f)));
-            }
-            if (rightMap == Map.Seen)
-            {
-                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x + 0.5f, this.cornerLocation.y - 0.5f)));
-                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x + 0.5f, this.cornerLocation.y + 0.5f)));
+                this.classifyEdge(this.mapPointToEdge(new Vector2(x, y + 0.5f)), Vector2.one, Vector2.left, false, true);
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y + 0.5f)));
             }
         }
         if (rightMap == Map.InnerWall)
         {
-            if (topMap == Map.Seen)
+            if (topMap == Map.Seen && leftMap == Map.Seen)
             {
-                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x + 0.5f, this.cornerLocation.y + 0.5f)));
+                Vector2 edge = this.mapPointToEdge(new Vector2(x, y - 0.5f));
+                this.classifyEdge(edge, Vector2.one, Vector2.right, false, true);
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y - 0.5f)));
+
             }
-            if (downMap == Map.Seen)
+            if (downMap == Map.Seen && leftMap == Map.Seen)
             {
-                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x + 0.5f, this.cornerLocation.y - 0.5f)));
-            }
-            if (leftMap == Map.Seen)
-            {
-                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x - 0.5f, this.cornerLocation.y + 0.5f)));
-                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x - 0.5f, this.cornerLocation.y - 0.5f)));
+                Vector2 edge = this.mapPointToEdge(new Vector2(x, y + 0.5f));
+                this.classifyEdge(edge, Vector2.one, Vector2.right, false, true);
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y + 0.5f)));
             }
         }
         if (topMap == Map.InnerWall)
         {
-            if (rightMap == Map.Seen)
+            if (downMap == Map.Seen && leftMap == Map.Seen)
             {
-                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x + 0.5f, this.cornerLocation.y + 0.5f)));
+                Vector2 edge = this.mapPointToEdge(new Vector2(x + 0.5f, y));
+                this.classifyEdge(edge, Vector2.one, Vector2.up, false, true);
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y - 0.5f)));
             }
-            if (leftMap == Map.Seen)
+            if (downMap == Map.Seen && rightMap == Map.Seen)
             {
-                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x - 0.5f, this.cornerLocation.y + 0.5f)));
-            }
-            if (downMap == Map.Seen)
-            {
-                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x - 0.5f, this.cornerLocation.y - 0.5f)));
-                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x + 0.5f, this.cornerLocation.y - 0.5f)));
+                Vector2 edge = this.mapPointToEdge(new Vector2(x - 0.5f, y));
+                this.classifyEdge(edge, Vector2.one, Vector2.up, false, true);
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y - 0.5f)));
             }
         }
         if (downMap == Map.InnerWall)
         {
-            if (rightMap == Map.Seen)
+            if (leftMap == Map.Seen && topMap == Map.Seen)
             {
-                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x + 0.5f, this.cornerLocation.y - 0.5f)));
+                Vector2 edge = this.mapPointToEdge(new Vector2(x + 0.5f, y));
+                this.classifyEdge(edge, Vector2.one, Vector2.down, false, true);
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y + 0.5f)));
             }
-            if (leftMap == Map.Seen)
+            if (rightMap == Map.Seen && topMap == Map.Seen)
             {
-                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x - 0.5f, this.cornerLocation.y - 0.5f)));
-            }
-            if (topMap == Map.Seen)
-            {
-                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x - 0.5f, this.cornerLocation.y + 0.5f)));
-                blocks.Add(this.mapCoordinatesToBlock(new Vector2(this.cornerLocation.x + 0.5f, this.cornerLocation.y + 0.5f)));
+                Vector2 edge = this.mapPointToEdge(new Vector2(x - 0.5f, y));
+                this.classifyEdge(edge, Vector2.one, Vector2.down, false, true);
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y + 0.5f)));
             }
         }
 
@@ -534,8 +538,6 @@ public class TileSeeker : MonoBehaviour
 
         this.originalDirectionBeforeWallScan = this.lookingDirection;
 
-        this.foundCorner = false;
-
         this.lastCornerDistance = choice.distance;
         this.currCornerDistance = choice.distance;
 
@@ -569,12 +571,17 @@ public class TileSeeker : MonoBehaviour
 
         if (hit.collider.tag.Equals("Outer"))
         {
-            Debug.Log($"{this.currCornerDistance}, {this.lastCornerDistance}");
-            if (Mathf.Abs(this.currCornerDistance - this.lastCornerDistance) > 1f)
+            // Debug.Log($"{this.currCornerDistance}, {this.lastCornerDistance}");
+
+            Vector2 coordinates = new Vector2(Mathf.Round(this.lastCornerSearch.x), Mathf.Round(this.lastCornerSearch.y));
+
+            Debug.Log($"Contains coordinates {coordinates}? {this.cornersSeen.Contains(coordinates)}");
+
+            if (Mathf.Abs(this.currCornerDistance - this.lastCornerDistance) > 1f && !this.cornersSeen.Contains(coordinates))
             {
-                this.foundCorner = true;
-                this.cornerLocation = this.lastCornerSearch;
-                Debug.Log(this.cornerLocation);
+                this.cornerLocation = coordinates;
+                Debug.Log($"Corner Location: {this.cornerLocation}");
+                this.cornersSeen.Add(coordinates);
 
                 float rotationAmount = (float)(this.originalDirectionBeforeWallScan - this.lookingDirection);
                 this.lookingDirection = this.originalDirectionBeforeWallScan;
@@ -648,7 +655,7 @@ public class TileSeeker : MonoBehaviour
 
             this.rotationAmountBeforeMove = Vector2.SignedAngle(angle, location);
 
-            Debug.Log($"{this.lookingDirection} {angle} {location} {this.rotationAmountBeforeMove}");
+            // Debug.Log($"{this.lookingDirection} {angle} {location} {this.rotationAmountBeforeMove}");
             this.moveRotation = (this.rotationAmountBeforeMove > 0) ? 45 : -45;
             this.currMoveRotation = 0f;
         }
@@ -670,6 +677,7 @@ public class TileSeeker : MonoBehaviour
 
     private void move()
     {
+        this.markInMyDirection();
         if (this.path.Count == 0)
         {
             this.transform.position = this.transform.position + this.movement();
@@ -681,16 +689,29 @@ public class TileSeeker : MonoBehaviour
         }
     }
 
+    private void markInMyDirection()
+    {
+        int playerMask = ~(1 << 8);
+        Vector2 dir = new Vector2(Mathf.Cos((float)this.lookingDirection * Mathf.Deg2Rad), Mathf.Sin((float)this.lookingDirection * Mathf.Deg2Rad));
+        RaycastHit2D hit = Physics2D.Raycast(this.transform.position, dir, Mathf.Infinity, playerMask);
+        this.markEdges(this.transform.position, hit.point, dir);
+    }
+
     private void rotateToMove()
     {
         if (Mathf.Round(Mathf.Abs(this.currMoveRotation - this.rotationAmountBeforeMove)) < Math.Pow(10, -3))
         {
+            this.markInMyDirection();
             this.currMode = Mode.Move;
             this.moveRotation = 0;
             this.currMoveRotation = 0;
             this.rotationAmountBeforeMove = 0;
             return;
         }
+
+        this.markInMyDirection();
+
+
         this.lookingDirection += this.moveRotation;
         this.transform.Rotate(new Vector3(0, 0, this.moveRotation));
         this.currMoveRotation += this.moveRotation;
@@ -758,12 +779,12 @@ public class TileSeeker : MonoBehaviour
 
                 foreach (Vector2 vec in choices)
                 {
-                    this.classifyEdge(vec, Vector2.one, true, true);
+                    this.classifyEdge(vec, Vector2.one, direction, true, true);
                 }
             }
             else
             {
-                this.classifyEdge(first, Vector2.one, false, true);
+                this.classifyEdge(first, Vector2.one, direction, false, true);
             }
             i = 1;
             res = true;
@@ -777,7 +798,7 @@ public class TileSeeker : MonoBehaviour
             {
                 Vector2 mapOne = this.mapPointToEdge((Vector2)points[i]);
                 Vector2 mapTwo = this.mapPointToEdge((Vector2)points[i + 1]);
-                this.classifyEdge(mapOne, mapTwo, true, false);
+                this.classifyEdge(mapOne, mapTwo, direction, true, false);
             }
         }
         else
@@ -789,7 +810,7 @@ public class TileSeeker : MonoBehaviour
                 // Debug.Log(vec);
                 Vector2 mapped = this.mapPointToEdge(vec);
                 // Debug.Log(mapped);
-                this.classifyEdge(mapped, Vector2.one, false, false);
+                this.classifyEdge(mapped, Vector2.one, direction, false, false);
             }
         }
 
@@ -1006,7 +1027,7 @@ public class TileSeeker : MonoBehaviour
         }
     }
 
-    private void classifyEdge(Vector2 edgeOne, Vector2 edgeTwo, bool diag, bool isWall)
+    private void classifyEdge(Vector2 edgeOne, Vector2 edgeTwo, Vector2 dir, bool diag, bool isWall)
     {
         if (isWall)
         {
@@ -1047,8 +1068,15 @@ public class TileSeeker : MonoBehaviour
                 this.edges[y, x] = Map.InnerWall;
 
                 (int nodeOne, int nodeTwo) = this.mapEdgeToBlocks(x, y);
-                this.blockGraph[nodeOne, nodeTwo] = false;
-                this.blockGraph[nodeTwo, nodeOne] = false;
+
+                if (Vector2.Angle(dir, Vector2.down) <= 45 || Vector2.Angle(dir, Vector2.right) <= 45)
+                {
+                    this.removeBlockFromGraph(nodeTwo);
+                }
+                else if (Vector2.Angle(dir, Vector2.left) <= 45 || Vector2.Angle(dir, Vector2.up) <= 45)
+                {
+                    this.removeBlockFromGraph(nodeOne);
+                }
             }
             return;
         }
@@ -1109,6 +1137,54 @@ public class TileSeeker : MonoBehaviour
                 default:
                     break;
             }
+        }
+    }
+
+    private void removeBlockFromGraph(int block)
+    {
+        // Debug.Log($"Removing {block}");
+        if (!(block == 0 || block == 5 || block == 10 || block == 15 || block == 20))
+        {
+            // W
+            this.blockGraph[block, block - 1] = false;
+            this.blockGraph[block - 1, block] = false;
+
+            // NW
+            this.blockGraph[block, block - 6] = false;
+            this.blockGraph[block - 6, block] = false;
+
+            // SW
+            this.blockGraph[block, block + 4] = false;
+            this.blockGraph[block + 4, block] = false;
+        }
+
+        if (!(block >= 0 && block <= 4))
+        {
+            // N
+            this.blockGraph[block, block - 5] = false;
+            this.blockGraph[block - 5, block] = false;
+        }
+
+        if (!(block >= 20 && block <= 24))
+        {
+            // S
+            this.blockGraph[block, block + 5] = false;
+            this.blockGraph[block + 5, block] = false;
+        }
+
+        if (!(block == 4 || block == 9 || block == 14 || block == 19 || block == 24))
+        {
+            // E
+            this.blockGraph[block, block + 1] = false;
+            this.blockGraph[block + 1, block] = false;
+
+            // NE
+            this.blockGraph[block, block - 4] = false;
+            this.blockGraph[block - 4, block] = false;
+
+            // SE
+            this.blockGraph[block, block + 6] = false;
+            this.blockGraph[block + 6, block] = false;
         }
     }
 
