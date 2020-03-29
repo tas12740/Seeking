@@ -56,7 +56,7 @@ public class TileSeeker : MonoBehaviour
     private Map[,] edges;
     private bool[,] blockGraph;
     public float timeStep = 1f;
-    public float timeeStepScanWall;
+    public float timeStepScanWall;
     private float timer = 0f;
     private System.Random random;
     private Dictionary<int, bool> locationMap;
@@ -124,17 +124,17 @@ public class TileSeeker : MonoBehaviour
                 blockGraph[i, i + 1] = true;
                 blockGraph[i + 1, i] = true;
 
-                if (i < 20)
-                {
-                    blockGraph[i, i + 6] = true;
-                    blockGraph[i + 6, i] = true;
-                }
+                // if (i < 20)
+                // {
+                //     blockGraph[i, i + 6] = true;
+                //     blockGraph[i + 6, i] = true;
+                // }
 
-                if (i > 4)
-                {
-                    blockGraph[i, i - 4] = true;
-                    blockGraph[i - 4, i] = true;
-                }
+                // if (i > 4)
+                // {
+                //     blockGraph[i, i - 4] = true;
+                //     blockGraph[i - 4, i] = true;
+                // }
             }
             if (i < 20)
             {
@@ -166,7 +166,7 @@ public class TileSeeker : MonoBehaviour
         this.timer += Time.deltaTime;
         if (this.currMode == Mode.ScanWall)
         {
-            if (this.timer > this.timeeStepScanWall)
+            if (this.timer > this.timeStepScanWall)
             {
                 doUpdate();
                 this.timer = 0;
@@ -300,7 +300,7 @@ public class TileSeeker : MonoBehaviour
         //     Debug.Log(obj);
         // }
         int blockChoice = (int)blocks[this.random.Next(blocks.Count)];
-        // Debug.Log($"Block choice: {blockChoice}");
+        Debug.Log($"Block choice: {blockChoice}");
 
         this.generatePath(this.mapCoordinatesToBlock(this.transform.position), blockChoice);
         // foreach (System.Object obj in this.path)
@@ -439,6 +439,7 @@ public class TileSeeker : MonoBehaviour
         ArrayList res = new ArrayList();
         foreach (int i in blocks)
         {
+            Debug.Log($"Block: {i}");
             res.Add(i);
         }
 
