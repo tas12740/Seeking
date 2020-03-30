@@ -2,6 +2,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Text;
 
 public class TileSeeker : MonoBehaviour
 {
@@ -16,6 +17,7 @@ public class TileSeeker : MonoBehaviour
     }
     private enum Mode
     {
+        ReadyToScan,
         Scan,
         ReadyToMove,
         RotateToMove,
@@ -37,7 +39,10 @@ public class TileSeeker : MonoBehaviour
     // WALL SCANNING VARIABLES           //
     //////////////////////////////////////
     private List<(Vector2, Vector2)> walls = new List<(Vector2, Vector2)>();
-    private Vector2 otherCorner = Vector2.zero;
+    private Vector2 originalPoint = Vector2.positiveInfinity;
+    private bool horizontalWall = false;
+    private bool setCorner = false;
+    private Vector2 otherCorner = 200 * Vector2.one;
     private double originalDirectionBeforeWallScan;
     private HashSet<Vector2> cornersSeen = new HashSet<Vector2>();
     private Vector2 cornerLocation = Vector2.zero;
@@ -49,7 +54,8 @@ public class TileSeeker : MonoBehaviour
     private Vector2 currCornerSearch;
     private const float CORNERUPDATENEGATIVE = -1f;
     private const float CORNERUPDATEPOSITIVE = 1f;
-    private Stack path = new Stack();
+    private Stack<int> path = new Stack<int>();
+    private int goalBlock = -1;
 
     private double lookingDirection = 0;
     private float currRotation = 0;
@@ -57,6 +63,7 @@ public class TileSeeker : MonoBehaviour
     public LineRenderer line;
     private Map[,] edges;
     private bool[,] blockGraph;
+    private HashSet<int> removedBlocks = new HashSet<int>();
     public float timeStep = 1f;
     public float timeStepScanWall;
     private float timer = 0f;
@@ -68,7 +75,7 @@ public class TileSeeker : MonoBehaviour
     {
         this.random = new System.Random();
 
-        this.currMode = Mode.Scan;
+        this.currMode = Mode.ReadyToScan;
         this.seesHider = false;
 
         line.positionCount = 2;
@@ -193,9 +200,16 @@ public class TileSeeker : MonoBehaviour
         else if (this.currMode == Mode.Move)
         {
             this.move();
+
+            if (this.currMode == Mode.FindCorner)
+            {
+                return;
+            }
+
             if (this.path.Count == 0)
             {
-                this.currMode = Mode.Scan;
+                this.currMode = Mode.ReadyToScan;
+                this.goalBlock = -1;
             }
             else
             {
@@ -256,12 +270,18 @@ public class TileSeeker : MonoBehaviour
 
                 // Debug.Log(hit.point);
 
-                bool seesInnerWall = markEdges(new Vector2(this.transform.position.x, this.transform.position.y), hit.point, new Vector2(dir.x, dir.y));
-                if (seesInnerWall)
+                bool seesInnerWall = markEdges(this.transform.position, hit.point, new Vector2(dir.x, dir.y));
+                if (seesInnerWall && !this.isOnSeenWall(hit.point))
                 {
                     this.currMode = Mode.ScanWallStart;
                 }
             }
+        }
+        else if (this.currMode == Mode.ReadyToScan)
+        {
+            this.didRotate = false;
+            this.currRotation = 0;
+            this.currMode = Mode.Scan;
         }
         else if (this.currMode == Mode.ScanWallStart)
         {
@@ -278,28 +298,78 @@ public class TileSeeker : MonoBehaviour
         }
     }
 
+    private bool isOnSeenWall(Vector2 point)
+    {
+        foreach ((Vector2, Vector2) tup in this.walls)
+        {
+            Vector2 one = tup.Item1;
+            Vector2 two = tup.Item2;
+            bool horizontal = Mathf.Abs(one.y - two.y) < Mathf.Pow(10, -3);
+            if (horizontal)
+            {
+                bool onWall = Mathf.Abs(point.y - one.y) < Mathf.Pow(10, -3);
+                if (onWall)
+                {
+                    return true;
+                }
+            }
+            else
+            {
+                bool onWall = Mathf.Abs(point.x - one.x) < Mathf.Pow(10, -3);
+                if (onWall)
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     private void findCorner()
     {
-        Vector2 nodeLocation = this.closestNode(this.cornerLocation);
-        float node = Mathf.Round(this.mapNode(nodeLocation.y, nodeLocation.x));
-        ArrayList edges = this.edgesForNode(node);
+        Debug.Log("Finding corner!");
+        if (this.goalBlock == -1)
+        {
+            Vector2 nodeLocation = this.closestNode(this.cornerLocation);
+            float node = Mathf.Round(this.mapNode(nodeLocation.y, nodeLocation.x));
+            ArrayList edges = this.edgesForNode(node);
 
-        Vector2 top = (Vector2)edges[0];
-        Vector2 right = (Vector2)edges[1];
-        Vector2 left = (Vector2)edges[2];
-        Vector2 down = (Vector2)edges[3];
+            Vector2 top = (Vector2)edges[0];
+            Vector2 right = (Vector2)edges[1];
+            Vector2 left = (Vector2)edges[2];
+            Vector2 down = (Vector2)edges[3];
 
-        Map topMap = this.edges[Mathf.RoundToInt(top.x), Mathf.RoundToInt(top.y)];
-        Map rightMap = this.edges[Mathf.RoundToInt(right.x), Mathf.RoundToInt(right.y)];
-        Map leftMap = this.edges[Mathf.RoundToInt(left.x), Mathf.RoundToInt(left.y)];
-        Map downMap = this.edges[Mathf.RoundToInt(down.x), Mathf.RoundToInt(down.y)];
+            Map topMap = this.edges[Mathf.RoundToInt(top.x), Mathf.RoundToInt(top.y)];
+            Map rightMap = this.edges[Mathf.RoundToInt(right.x), Mathf.RoundToInt(right.y)];
+            Map leftMap = this.edges[Mathf.RoundToInt(left.x), Mathf.RoundToInt(left.y)];
+            Map downMap = this.edges[Mathf.RoundToInt(down.x), Mathf.RoundToInt(down.y)];
 
-        ArrayList blocks = this.openBlocks(cornerLocation, topMap, leftMap, rightMap, downMap);
+            List<int> blocks = this.openBlocks(cornerLocation, topMap, leftMap, rightMap, downMap);
 
-        int blockChoice = (int)blocks[this.random.Next(blocks.Count)];
-        Debug.Log($"Block choice: {blockChoice}");
+            if (blocks.Count == 0)
+            {
+                Debug.Log($"Found no blocks! {this.cornerLocation}");
+                // Debug.Log($"{topMap}-{rightMap}-{downMap}-{leftMap}");
+                Debug.Break();
+            }
 
-        this.generatePath(this.mapCoordinatesToBlock(this.transform.position), blockChoice);
+            int blockChoice = (int)blocks[this.random.Next(blocks.Count)];
+            Debug.Log($"Block choice: {blockChoice}");
+
+            this.goalBlock = blockChoice;
+        }
+
+
+        this.generatePath(this.mapCoordinatesToBlock(this.transform.position), this.goalBlock);
+
+        StringBuilder sb = new StringBuilder();
+        int firstBlock = this.mapCoordinatesToBlock(this.transform.position);
+        sb.Append($"Path: {firstBlock}");
+        foreach (int block in this.path)
+        {
+            sb.Append($" -> {block}");
+        }
+        Debug.Log(sb.ToString());
 
         this.currMode = Mode.ReadyToMove;
     }
@@ -360,7 +430,7 @@ public class TileSeeker : MonoBehaviour
         this.path.Pop();
     }
 
-    private ArrayList openBlocks(Vector2 cornerLocation, Map topMap, Map leftMap, Map rightMap, Map downMap)
+    private List<int> openBlocks(Vector2 cornerLocation, Map topMap, Map leftMap, Map rightMap, Map downMap)
     {
         HashSet<int> blocks = new HashSet<int>();
 
@@ -372,75 +442,177 @@ public class TileSeeker : MonoBehaviour
                 countUnknown++;
             }
         }
-        if (countUnknown >= 2)
-        {
-            ArrayList empty = new ArrayList();
-            return empty;
-        }
+        // if (countUnknown >= 2)
+        // {
+        //     List<int> empty = new List<int>();
+        //     return empty;
+        // }
 
         float x = Mathf.Round(cornerLocation.x);
         float y = Mathf.Round(cornerLocation.y);
-        if (leftMap == Map.InnerWall)
+        if (countUnknown == 1)
         {
-            if (topMap == Map.Seen && rightMap == Map.Seen)
+            if (leftMap == Map.InnerWall)
             {
-                this.classifyEdge(this.mapPointToEdge(new Vector2(x, y - 0.5f)), Vector2.one, Vector2.left, false, true);
+                if (topMap == Map.Seen && rightMap == Map.Seen)
+                {
+                    this.classifyEdge(this.mapPointToEdge(new Vector2(x, y - 0.5f)), Vector2.one, Vector2.left, false, true);
+                    blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y - 0.5f)));
+                }
+                else if (downMap == Map.Seen && rightMap == Map.Seen)
+                {
+                    this.classifyEdge(this.mapPointToEdge(new Vector2(x, y + 0.5f)), Vector2.one, Vector2.left, false, true);
+                    blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y + 0.5f)));
+                }
+                else if (downMap == Map.Seen && rightMap == Map.InnerWall)
+                {
+                    blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y - 0.5f)));
+                    blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y - 0.5f)));
+                }
+                else if (topMap == Map.Seen && rightMap == Map.InnerWall)
+                {
+                    blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y + 0.5f)));
+                    blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y + 0.5f)));
+                }
+            }
+            if (rightMap == Map.InnerWall)
+            {
+                if (topMap == Map.Seen && leftMap == Map.Seen)
+                {
+                    Vector2 edge = this.mapPointToEdge(new Vector2(x, y - 0.5f));
+                    this.classifyEdge(edge, Vector2.one, Vector2.right, false, true);
+                    blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y - 0.5f)));
+
+                }
+                else if (downMap == Map.Seen && leftMap == Map.Seen)
+                {
+                    Vector2 edge = this.mapPointToEdge(new Vector2(x, y + 0.5f));
+                    this.classifyEdge(edge, Vector2.one, Vector2.right, false, true);
+                    blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y + 0.5f)));
+                }
+                else if (downMap == Map.Seen && leftMap == Map.InnerWall)
+                {
+                    blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y - 0.5f)));
+                    blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y - 0.5f)));
+                }
+                else if (topMap == Map.Seen && leftMap == Map.InnerWall)
+                {
+                    blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y + 0.5f)));
+                    blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y + 0.5f)));
+                }
+            }
+            if (topMap == Map.InnerWall)
+            {
+                if (downMap == Map.Seen && leftMap == Map.Seen)
+                {
+                    Vector2 edge = this.mapPointToEdge(new Vector2(x + 0.5f, y));
+                    this.classifyEdge(edge, Vector2.one, Vector2.up, false, true);
+                    blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y - 0.5f)));
+                }
+                else if (downMap == Map.Seen && rightMap == Map.Seen)
+                {
+                    Vector2 edge = this.mapPointToEdge(new Vector2(x - 0.5f, y));
+                    this.classifyEdge(edge, Vector2.one, Vector2.up, false, true);
+                    blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y - 0.5f)));
+                }
+                else if (downMap == Map.InnerWall && rightMap == Map.Seen)
+                {
+                    blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y + 0.5f)));
+                    blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y - 0.5f)));
+                }
+                else if (downMap == Map.InnerWall && leftMap == Map.Seen)
+                {
+                    blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y + 0.5f)));
+                    blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y - 0.5f)));
+                }
+            }
+            if (downMap == Map.InnerWall)
+            {
+                if (leftMap == Map.Seen && topMap == Map.Seen)
+                {
+                    Vector2 edge = this.mapPointToEdge(new Vector2(x + 0.5f, y));
+                    this.classifyEdge(edge, Vector2.one, Vector2.down, false, true);
+                    blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y + 0.5f)));
+                }
+                else if (rightMap == Map.Seen && topMap == Map.Seen)
+                {
+                    Vector2 edge = this.mapPointToEdge(new Vector2(x - 0.5f, y));
+                    this.classifyEdge(edge, Vector2.one, Vector2.down, false, true);
+                    blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y + 0.5f)));
+                }
+                else if (topMap == Map.InnerWall && leftMap == Map.Seen)
+                {
+                    blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y + 0.5f)));
+                    blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y - 0.5f)));
+                }
+                else if (topMap == Map.InnerWall && rightMap == Map.Seen)
+                {
+                    blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y + 0.5f)));
+                    blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y - 0.5f)));
+                }
+            }
+        }
+        else if (countUnknown == 0)
+        {
+            if (leftMap == Map.InnerWall && downMap == Map.InnerWall)
+            {
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y - 0.5f)));
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y + 0.5f)));
+            }
+            else if (leftMap == Map.InnerWall && topMap == Map.InnerWall)
+            {
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y + 0.5f)));
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y - 0.5f)));
+            }
+            else if (rightMap == Map.InnerWall && topMap == Map.InnerWall)
+            {
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y + 0.5f)));
                 blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y - 0.5f)));
             }
-            else if (downMap == Map.Seen && rightMap == Map.Seen)
+            else if (rightMap == Map.InnerWall && downMap == Map.InnerWall)
             {
-                this.classifyEdge(this.mapPointToEdge(new Vector2(x, y + 0.5f)), Vector2.one, Vector2.left, false, true);
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y - 0.5f)));
                 blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y + 0.5f)));
             }
         }
-        if (rightMap == Map.InnerWall)
+        else if (countUnknown == 3)
         {
-            if (topMap == Map.Seen && leftMap == Map.Seen)
+            Vector2 newLocation;
+            if (leftMap == Map.InnerWall)
             {
-                Vector2 edge = this.mapPointToEdge(new Vector2(x, y - 0.5f));
-                this.classifyEdge(edge, Vector2.one, Vector2.right, false, true);
-                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y - 0.5f)));
+                newLocation = cornerLocation + Vector2.left;
+            }
+            else if (rightMap == Map.InnerWall)
+            {
+                newLocation = cornerLocation + Vector2.right;
+            }
+            else if (topMap == Map.InnerWall)
+            {
+                newLocation = cornerLocation + Vector2.up;
+            }
+            else
+            {
+                newLocation = cornerLocation + Vector2.down;
+            }
 
-            }
-            if (downMap == Map.Seen && leftMap == Map.Seen)
-            {
-                Vector2 edge = this.mapPointToEdge(new Vector2(x, y + 0.5f));
-                this.classifyEdge(edge, Vector2.one, Vector2.right, false, true);
-                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y + 0.5f)));
-            }
-        }
-        if (topMap == Map.InnerWall)
-        {
-            if (downMap == Map.Seen && leftMap == Map.Seen)
-            {
-                Vector2 edge = this.mapPointToEdge(new Vector2(x + 0.5f, y));
-                this.classifyEdge(edge, Vector2.one, Vector2.up, false, true);
-                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y - 0.5f)));
-            }
-            if (downMap == Map.Seen && rightMap == Map.Seen)
-            {
-                Vector2 edge = this.mapPointToEdge(new Vector2(x - 0.5f, y));
-                this.classifyEdge(edge, Vector2.one, Vector2.up, false, true);
-                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y - 0.5f)));
-            }
-        }
-        if (downMap == Map.InnerWall)
-        {
-            if (leftMap == Map.Seen && topMap == Map.Seen)
-            {
-                Vector2 edge = this.mapPointToEdge(new Vector2(x + 0.5f, y));
-                this.classifyEdge(edge, Vector2.one, Vector2.down, false, true);
-                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y + 0.5f)));
-            }
-            if (rightMap == Map.Seen && topMap == Map.Seen)
-            {
-                Vector2 edge = this.mapPointToEdge(new Vector2(x - 0.5f, y));
-                this.classifyEdge(edge, Vector2.one, Vector2.down, false, true);
-                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y + 0.5f)));
-            }
+            Vector2 nodeLocation = this.closestNode(newLocation);
+            float node = Mathf.Round(this.mapNode(nodeLocation.y, nodeLocation.x));
+            ArrayList edges = this.edgesForNode(node);
+
+            Vector2 top = (Vector2)edges[0];
+            Vector2 right = (Vector2)edges[1];
+            Vector2 left = (Vector2)edges[2];
+            Vector2 down = (Vector2)edges[3];
+
+            topMap = this.edges[Mathf.RoundToInt(top.x), Mathf.RoundToInt(top.y)];
+            rightMap = this.edges[Mathf.RoundToInt(right.x), Mathf.RoundToInt(right.y)];
+            leftMap = this.edges[Mathf.RoundToInt(left.x), Mathf.RoundToInt(left.y)];
+            downMap = this.edges[Mathf.RoundToInt(down.x), Mathf.RoundToInt(down.y)];
+
+            return this.openBlocks(newLocation, topMap, leftMap, rightMap, downMap);
         }
 
-        ArrayList res = new ArrayList();
+        List<int> res = new List<int>();
         foreach (int i in blocks)
         {
             Debug.Log($"Block: {i}");
@@ -498,12 +670,18 @@ public class TileSeeker : MonoBehaviour
     {
         int playerMask = ~(1 << 8);
 
-        float xDirLeft = (float)Math.Cos((this.lookingDirection - 0.1f) * Mathf.Deg2Rad);
-        float yDirLeft = (float)Math.Sin((this.lookingDirection - 0.1f) * Mathf.Deg2Rad);
+        float xDir = (float)Math.Cos(this.lookingDirection * Mathf.Deg2Rad);
+        float yDir = (float)Math.Sin(this.lookingDirection * Mathf.Deg2Rad);
+        Vector3 dir = new Vector3(xDir, yDir, 0);
+        RaycastHit2D hit = Physics2D.Raycast(this.transform.position, dir, Mathf.Infinity, playerMask);
+        this.originalPoint = hit.point;
+
+        float xDirLeft = (float)Math.Cos((this.lookingDirection + CORNERUPDATENEGATIVE) * Mathf.Deg2Rad);
+        float yDirLeft = (float)Math.Sin((this.lookingDirection + CORNERUPDATENEGATIVE) * Mathf.Deg2Rad);
         Vector3 left = new Vector3(xDirLeft, yDirLeft, 0);
 
-        float xDirRight = (float)Math.Cos((this.lookingDirection + 0.1f) * Mathf.Deg2Rad);
-        float yDirRight = (float)Math.Sin((this.lookingDirection + 0.1f) * Mathf.Deg2Rad);
+        float xDirRight = (float)Math.Cos((this.lookingDirection + CORNERUPDATEPOSITIVE) * Mathf.Deg2Rad);
+        float yDirRight = (float)Math.Sin((this.lookingDirection + CORNERUPDATEPOSITIVE) * Mathf.Deg2Rad);
         Vector3 right = new Vector3(xDirRight, yDirRight, 0);
 
         RaycastHit2D leftHit = Physics2D.Raycast(this.transform.position, left, Mathf.Infinity, playerMask);
@@ -516,7 +694,7 @@ public class TileSeeker : MonoBehaviour
 
         if (tagLeft.Equals("Inner") && tagRight.Equals("Inner"))
         {
-            this.cornerUpdate = (leftHit.distance < rightHit.distance) ? -0.1f : 0.1f;
+            this.cornerUpdate = (leftHit.distance < rightHit.distance) ? CORNERUPDATENEGATIVE : CORNERUPDATEPOSITIVE;
             choice = (leftHit.distance < rightHit.distance) ? leftHit : rightHit;
         }
         else if (tagLeft.Equals("Inner"))
@@ -545,6 +723,25 @@ public class TileSeeker : MonoBehaviour
         this.currCornerSearch = choice.point;
 
         this.wentOtherDirection = false;
+
+        this.otherCorner = 200 * Vector2.one;
+
+        this.horizontalWall = Mathf.Abs(this.originalPoint.y - choice.point.y) < Mathf.Pow(10, -3);
+        // Debug.Log($"Horizontal Wall? {horizontalWall}");
+
+        this.setCorner = false;
+    }
+
+    private bool leftWall(Vector2 point)
+    {
+        if (this.horizontalWall)
+        {
+            return (point.y - this.originalPoint.y) > Mathf.Pow(10, -3);
+        }
+        else
+        {
+            return (point.x - this.originalPoint.x) > Mathf.Pow(10, -3);
+        }
     }
 
     private void scanWall()
@@ -569,26 +766,44 @@ public class TileSeeker : MonoBehaviour
         this.lastCornerDistance = this.currCornerDistance;
         this.currCornerDistance = hit.distance;
 
-        if (hit.collider.tag.Equals("Outer"))
+        if (hit.collider.tag.Equals("Hider"))
         {
-            // Debug.Log($"{this.currCornerDistance}, {this.lastCornerDistance}");
+            float rotationAmount = Vector2.SignedAngle(hit.collider.transform.position - this.transform.position, new Vector2((float)Math.Cos(this.lookingDirection * Mathf.Deg2Rad), (float)Math.Sin(this.lookingDirection * Mathf.Deg2Rad)));
+            this.lookingDirection -= rotationAmount;
+            this.transform.Rotate(new Vector3(0, 0, -rotationAmount));
 
+            this.transform.position = this.transform.position + this.movement();
+
+            this.currMode = Mode.ReadyToScan;
+
+            return;
+        }
+
+        if (hit.collider.tag.Equals("Outer") || Mathf.Abs(this.currCornerDistance - this.lastCornerDistance) > 0.5f || this.leftWall(this.currCornerSearch))
+        {
             Vector2 coordinates = new Vector2(Mathf.Round(this.lastCornerSearch.x), Mathf.Round(this.lastCornerSearch.y));
+            Debug.Log($"Coordinates of a corner: {coordinates}");
+            // Debug.Log(this.lastCornerSearch);
 
-            Debug.Log($"Contains coordinates {coordinates}? {this.cornersSeen.Contains(coordinates)}");
+            // Debug.Log($"Contains coordinates {coordinates}? {this.cornersSeen.Contains(coordinates)}");
 
-            if (Mathf.Abs(this.currCornerDistance - this.lastCornerDistance) > 1f && !this.cornersSeen.Contains(coordinates))
+            if (!this.cornersSeen.Contains(coordinates) && this.isOnInnerWall(coordinates))
             {
-                this.cornerLocation = coordinates;
-                Debug.Log($"Corner Location: {this.cornerLocation}");
+                if (!this.setCorner)
+                {
+                    this.cornerLocation = coordinates;
+                    this.setCorner = true;
+                }
                 this.cornersSeen.Add(coordinates);
 
                 float rotationAmount = (float)(this.originalDirectionBeforeWallScan - this.lookingDirection);
                 this.lookingDirection = this.originalDirectionBeforeWallScan;
                 this.transform.Rotate(new Vector3(0, 0, rotationAmount));
 
-                this.currMode = Mode.FindCorner;
-                return;
+                this.lastCornerSearch = this.originalPoint;
+                this.lastCornerDistance = Vector2.Distance(this.originalPoint, this.transform.position);
+                this.currCornerSearch = this.originalPoint;
+                this.currCornerDistance = Vector2.Distance(this.originalPoint, this.transform.position);
             }
             else
             {
@@ -599,12 +814,46 @@ public class TileSeeker : MonoBehaviour
                     this.transform.Rotate(new Vector3(0, 0, rotationAmount));
 
                     this.currMode = Mode.Scan;
-                    return;
                 }
-                this.cornerUpdate = (Mathf.Abs(this.cornerUpdate - CORNERUPDATEPOSITIVE) < Mathf.Pow(10, -3)) ? CORNERUPDATENEGATIVE : CORNERUPDATEPOSITIVE;
+                else
+                {
+                    float rotationAmount = (float)(this.originalDirectionBeforeWallScan - this.lookingDirection);
+                    this.lookingDirection = this.originalDirectionBeforeWallScan;
+                    this.transform.Rotate(new Vector3(0, 0, rotationAmount));
+
+                    this.lastCornerSearch = this.originalPoint;
+                    this.lastCornerDistance = Vector2.Distance(this.originalPoint, this.transform.position);
+                    this.currCornerSearch = this.originalPoint;
+                    this.currCornerDistance = Vector2.Distance(this.originalPoint, this.transform.position);
+                }
+            }
+
+            if (this.otherCorner == 200 * Vector2.one)
+            {
+                // Debug.Log("Changing other corner!");
+                this.otherCorner = coordinates;
                 this.wentOtherDirection = true;
+                this.cornerUpdate = (Mathf.Abs(this.cornerUpdate - CORNERUPDATEPOSITIVE) < Mathf.Pow(10, -3)) ? CORNERUPDATENEGATIVE : CORNERUPDATEPOSITIVE;
+            }
+            else
+            {
+                Debug.Log($"Wall: ({this.otherCorner}, {coordinates})");
+                this.walls.Add((this.otherCorner, coordinates));
+                this.otherCorner = 200 * Vector2.one;
+
+                float rotationAmount = (float)(this.originalDirectionBeforeWallScan - this.lookingDirection);
+                this.lookingDirection = this.originalDirectionBeforeWallScan;
+                this.transform.Rotate(new Vector3(0, 0, rotationAmount));
+
+                this.currMode = Mode.FindCorner;
+                return;
             }
         }
+    }
+
+    private bool isOnLine(Vector2 point)
+    {
+        return (Mathf.Abs(point.x - this.originalPoint.x) < Mathf.Pow(10, -3)) || (Mathf.Abs(point.y - this.originalPoint.y) < Mathf.Pow(10, -3));
     }
 
     private void readyToMove()
@@ -647,7 +896,7 @@ public class TileSeeker : MonoBehaviour
         }
         else
         {
-            Vector2 location = this.mapBlockToCoordinates((int)this.path.Peek()) - new Vector2(this.transform.position.x, this.transform.position.y);
+            Vector2 location = this.mapBlockToCoordinates(this.path.Peek()) - new Vector2(this.transform.position.x, this.transform.position.y);
 
             float xDir = (float)Math.Cos(this.lookingDirection * Mathf.Deg2Rad);
             float yDir = (float)Math.Sin(this.lookingDirection * Mathf.Deg2Rad);
@@ -684,7 +933,15 @@ public class TileSeeker : MonoBehaviour
         }
         else
         {
-            Vector2 location = this.mapBlockToCoordinates((int)this.path.Pop());
+            int nextBlock = this.path.Pop();
+            if (this.removedBlocks.Contains(nextBlock))
+            {
+                Debug.Log("Editing path ...");
+                this.currMode = Mode.FindCorner;
+                return;
+            }
+
+            Vector2 location = this.mapBlockToCoordinates(nextBlock);
             this.transform.position = new Vector3(location.x, location.y, 0);
         }
     }
@@ -759,28 +1016,9 @@ public class TileSeeker : MonoBehaviour
             if (firstX == firstY)
             {
                 // oh boy
-                ArrayList choices = new ArrayList();
-                if (first.x + 6 <= 35)
-                {
-                    choices.Add(new Vector2(first.x, first.x + 6));
-                }
-                if (first.x + 1 <= 35)
-                {
-                    choices.Add(new Vector2(first.x, first.x + 1));
-                }
-                if (first.x - 1 >= 0)
-                {
-                    choices.Add(new Vector2(first.x - 1, first.x));
-                }
-                if (first.x - 6 >= 0)
-                {
-                    choices.Add(new Vector2(first.x - 6, first.x));
-                }
+                Vector2 vec = new Vector2(firstX, firstY);
 
-                foreach (Vector2 vec in choices)
-                {
-                    this.classifyEdge(vec, Vector2.one, direction, true, true);
-                }
+                this.classifyEdge(vec, Vector2.one, direction, true, true);
             }
             else
             {
@@ -1004,7 +1242,7 @@ public class TileSeeker : MonoBehaviour
         return (point.x >= xMin && point.x <= xMax && point.y >= yMin && point.y <= yMax);
     }
 
-    private (int, int) mapEdgeToBlocks(int nodeOne, int nodeTwo)
+    private (int, int, bool) mapEdgeToBlocks(int nodeOne, int nodeTwo)
     {
         int minNode = Mathf.RoundToInt(Mathf.Min(nodeOne, nodeTwo));
         int maxNode = Mathf.RoundToInt(Mathf.Max(nodeOne, nodeTwo));
@@ -1017,13 +1255,13 @@ public class TileSeeker : MonoBehaviour
             int colBarrier = minNode % 6;
             int row = (maxNode / 6) - 1;
 
-            return ((row * 5 + (colBarrier - 1)), row * 5 + colBarrier);
+            return ((row * 5 + (colBarrier - 1)), row * 5 + colBarrier, horizontal);
         }
         else
         {
             int row = (minNode / 6) - 1;
             int col = (maxNode % 6) - 1;
-            return ((row * 5 + col), (row * 5 + col + 5));
+            return ((row * 5 + col), (row * 5 + col + 5), horizontal);
         }
     }
 
@@ -1033,32 +1271,75 @@ public class TileSeeker : MonoBehaviour
         {
             int x = Mathf.RoundToInt(edgeOne.x);
             int y = Mathf.RoundToInt(edgeOne.y);
+
+
+            float epsilon = 45f + Mathf.Pow(10, -3);
             if (diag)
             {
+                int playerMask = ~(1 << 8);
+
                 Map curr = this.edges[x, y];
 
-                switch (curr)
+                float node = Mathf.Round(x);
+                ArrayList edges = this.edgesForNode(node);
+
+                Vector2 top = (Vector2)edges[0];
+                Vector2 right = (Vector2)edges[1];
+                Vector2 left = (Vector2)edges[2];
+                Vector2 down = (Vector2)edges[3];
+
+                Map topMap = this.edges[Mathf.RoundToInt(top.x), Mathf.RoundToInt(top.y)];
+                Map rightMap = this.edges[Mathf.RoundToInt(right.x), Mathf.RoundToInt(right.y)];
+                Map leftMap = this.edges[Mathf.RoundToInt(left.x), Mathf.RoundToInt(left.y)];
+                Map downMap = this.edges[Mathf.RoundToInt(down.x), Mathf.RoundToInt(down.y)];
+
+                if (topMap == Map.InnerWall && downMap == Map.Unknown)
                 {
-                    case Map.Blank:
-                    case Map.InnerWall:
-                        break;
-                    case Map.OuterWall:
-                        this.drawEdge(this.mapEdge(x, y), Color.red);
-                        break;
-                    case Map.MaybeWall:
-                        // this.edges[x, y] = Map.InnerWall;
-                        // this.edges[y, x] = Map.InnerWall;
-                        // this.drawEdge(this.mapEdge(x, y), Color.red);
-                        break;
-                    case Map.Unknown:
-                        // this.edges[x, y] = Map.MaybeWall;
-                        // this.edges[y, x] = Map.MaybeWall;
-                        // this.drawEdge(this.mapEdge(x, y), Color.yellow);
-                        break;
-                    case Map.Seen:
-                        break;
-                    default:
-                        break;
+                    float xDir = (float)Math.Cos((this.lookingDirection + CORNERUPDATEPOSITIVE) * Mathf.Deg2Rad);
+                    float yDir = (float)Math.Sin((this.lookingDirection + CORNERUPDATEPOSITIVE) * Mathf.Deg2Rad);
+                    Vector3 direction = new Vector3(xDir, yDir, 0);
+
+                    RaycastHit2D hit = Physics2D.Raycast(this.transform.position, direction, Mathf.Infinity, playerMask);
+
+                    this.markEdges(this.transform.position, hit.point, direction);
+                }
+                if (leftMap == Map.InnerWall && rightMap == Map.Unknown)
+                {
+                    float xDir = (float)Math.Cos((this.lookingDirection + CORNERUPDATENEGATIVE) * Mathf.Deg2Rad);
+                    float yDir = (float)Math.Sin((this.lookingDirection + CORNERUPDATENEGATIVE) * Mathf.Deg2Rad);
+                    Vector3 direction = new Vector3(xDir, yDir, 0);
+
+                    RaycastHit2D hit = Physics2D.Raycast(this.transform.position, direction, Mathf.Infinity, playerMask);
+
+                    this.markEdges(this.transform.position, hit.point, direction);
+                }
+                if (rightMap == Map.InnerWall && leftMap == Map.Unknown)
+                {
+                    float xDir = (float)Math.Cos((this.lookingDirection + CORNERUPDATEPOSITIVE) * Mathf.Deg2Rad);
+                    float yDir = (float)Math.Sin((this.lookingDirection + CORNERUPDATEPOSITIVE) * Mathf.Deg2Rad);
+                    Vector3 direction = new Vector3(xDir, yDir, 0);
+
+                    RaycastHit2D hit = Physics2D.Raycast(this.transform.position, direction, Mathf.Infinity, playerMask);
+
+                    this.markEdges(this.transform.position, hit.point, direction);
+                }
+                if (downMap == Map.InnerWall && topMap == Map.Unknown)
+                {
+                    float xDir = (float)Math.Cos((this.lookingDirection + CORNERUPDATENEGATIVE) * Mathf.Deg2Rad);
+                    float yDir = (float)Math.Sin((this.lookingDirection + CORNERUPDATENEGATIVE) * Mathf.Deg2Rad);
+                    Vector3 direction = new Vector3(xDir, yDir, 0);
+
+                    RaycastHit2D hit = Physics2D.Raycast(this.transform.position, direction, Mathf.Infinity, playerMask);
+
+                    this.markEdges(this.transform.position, hit.point, direction);
+                }
+
+                foreach (Vector2 vec in new Vector2[] { top, right, left, down })
+                {
+                    if (this.edges[Mathf.RoundToInt(vec.x), Mathf.RoundToInt(vec.y)] == Map.OuterWall)
+                    {
+                        this.drawEdge(this.mapEdge(vec.x, vec.y), Color.red);
+                    }
                 }
             }
             else
@@ -1067,15 +1348,29 @@ public class TileSeeker : MonoBehaviour
                 this.edges[x, y] = Map.InnerWall;
                 this.edges[y, x] = Map.InnerWall;
 
-                (int nodeOne, int nodeTwo) = this.mapEdgeToBlocks(x, y);
+                (int nodeOne, int nodeTwo, bool horizontal) = this.mapEdgeToBlocks(x, y);
 
-                if (Vector2.Angle(dir, Vector2.down) <= 45 || Vector2.Angle(dir, Vector2.right) <= 45)
+                if (horizontal)
                 {
-                    this.removeBlockFromGraph(nodeTwo);
+                    if (Vector2.Angle(dir, Vector2.right) < Vector2.Angle(dir, Vector2.left))
+                    {
+                        this.removeBlockFromGraph(nodeTwo);
+                    }
+                    else
+                    {
+                        this.removeBlockFromGraph(nodeOne);
+                    }
                 }
-                else if (Vector2.Angle(dir, Vector2.left) <= 45 || Vector2.Angle(dir, Vector2.up) <= 45)
+                else
                 {
-                    this.removeBlockFromGraph(nodeOne);
+                    if (Vector2.Angle(dir, Vector2.up) < Vector2.Angle(dir, Vector2.down))
+                    {
+                        this.removeBlockFromGraph(nodeOne);
+                    }
+                    else
+                    {
+                        this.removeBlockFromGraph(nodeTwo);
+                    }
                 }
             }
             return;
@@ -1142,7 +1437,12 @@ public class TileSeeker : MonoBehaviour
 
     private void removeBlockFromGraph(int block)
     {
-        // Debug.Log($"Removing {block}");
+        if (this.removedBlocks.Contains(block))
+        {
+            return;
+        }
+        Debug.Log($"Removing {block}");
+        this.removedBlocks.Add(block);
         if (!(block == 0 || block == 5 || block == 10 || block == 15 || block == 20))
         {
             // W
