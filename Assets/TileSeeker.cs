@@ -1077,7 +1077,7 @@ public class TileSeeker : MonoBehaviour
         {
             int nextBlock = this.path.Pop();
             Vector2 location = this.mapBlockToCoordinates(nextBlock);
-            if (this.removedBlocks.Contains(nextBlock) || this.innerWallCollider.OverlapPoint(location))
+            if (this.removedBlocks.Contains(nextBlock))
             {
                 Debug.Log("Editing path ...");
                 this.removeBlockFromGraph(nextBlock);
@@ -1617,13 +1617,19 @@ public class TileSeeker : MonoBehaviour
             this.blockGraph[block, block - 1] = false;
             this.blockGraph[block - 1, block] = false;
 
-            // NW
-            this.blockGraph[block, block - (cols + 1)] = false;
-            this.blockGraph[block - (cols + 1), block] = false;
+            if (block >= cols)
+            {
+                // NW
+                this.blockGraph[block, block - (cols + 1)] = false;
+                this.blockGraph[block - (cols + 1), block] = false;
+            }
 
-            // SW
-            this.blockGraph[block, block + (cols - 1)] = false;
-            this.blockGraph[block + (cols - 1), block] = false;
+            if (block < rows * (cols - 1))
+            {
+                // SW
+                this.blockGraph[block, block + (cols - 1)] = false;
+                this.blockGraph[block + (cols - 1), block] = false;
+            }
         }
 
         if (!(block >= 0 && block <= cols - 1))
@@ -1646,13 +1652,19 @@ public class TileSeeker : MonoBehaviour
             this.blockGraph[block, block + 1] = false;
             this.blockGraph[block + 1, block] = false;
 
-            // NE
-            this.blockGraph[block, block - (cols - 1)] = false;
-            this.blockGraph[block - (cols - 1), block] = false;
+            if (block >= cols)
+            {
+                // NE
+                this.blockGraph[block, block - (cols - 1)] = false;
+                this.blockGraph[block - (cols - 1), block] = false;
+            }
 
-            // SE
-            this.blockGraph[block, block + (cols + 1)] = false;
-            this.blockGraph[block + (cols + 1), block] = false;
+            if (block < rows * (cols - 1))
+            {
+                // SE
+                this.blockGraph[block, block + (cols + 1)] = false;
+                this.blockGraph[block + (cols + 1), block] = false;
+            }
         }
     }
 

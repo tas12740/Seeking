@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using System.Linq;
 
 public class GraphSeeker : MonoBehaviour
 {
@@ -11,6 +12,10 @@ public class GraphSeeker : MonoBehaviour
         Failed
     }
 
+    public int rows = 10;
+    public int cols = 10;
+    public Vector2 originPoint = new Vector2(4f, 8f);
+
     public LineRenderer line;
     public float timeStep = 1f;
     private bool[,] blockGraph;
@@ -20,34 +25,55 @@ public class GraphSeeker : MonoBehaviour
     private Mode currMode = Mode.Plan;
     private float timer = 0f;
     private Collider2D innerWallCollider;
+    private HashSet<int> removedBlocks = new HashSet<int>();
 
     // Start is called before the first frame update
     void Start()
     {
-        this.blockGraph = new bool[25, 25];
-        for (int i = 0; i <= 24; i++)
+        int finalBlock = rows * cols - 1;
+        // Debug.Log($"Final block: {finalBlock}");
+
+        this.blockGraph = new bool[finalBlock + 1, finalBlock + 1];
+        for (int i = 0; i < finalBlock; i++)
         {
-            if (!(i == 4 || i == 9 || i == 14 || i == 19 || i == 24))
+            // not in the rightmost column
+            if (!EnumerableUtility.Range(cols - 1, finalBlock + 1, cols).Contains(i))
             {
+                // E
                 blockGraph[i, i + 1] = true;
                 blockGraph[i + 1, i] = true;
 
-                if (i < 20)
+                if (i < finalBlock - cols)
                 {
-                    blockGraph[i, i + 6] = true;
-                    blockGraph[i + 6, i] = true;
-                }
-
-                if (i > 4)
-                {
-                    blockGraph[i, i - 4] = true;
-                    blockGraph[i - 4, i] = true;
+                    // SE
+                    blockGraph[i, i + (cols + 1)] = true;
+                    blockGraph[i + (cols + 1), i] = true;
                 }
             }
-            if (i < 20)
+            if (i < (finalBlock + 1 - cols))
             {
-                blockGraph[i, i + 5] = true;
-                blockGraph[i + 5, i] = true;
+                // S
+                blockGraph[i, i + cols] = true;
+                blockGraph[i + cols, i] = true;
+            }
+            if (i >= cols)
+            {
+                // N
+                blockGraph[i, i - cols] = true;
+                blockGraph[i - cols, i] = true;
+            }
+            if (!EnumerableUtility.Range(0, finalBlock + 2 - cols, cols).Contains(i))
+            {
+                // W
+                blockGraph[i, i - 1] = true;
+                blockGraph[i - 1, i] = true;
+
+                if (i < (finalBlock + 1 - cols))
+                {
+                    // SW
+                    blockGraph[i, i + (cols - 1)] = true;
+                    blockGraph[i + (cols - 1), i] = true;
+                }
             }
         }
 
@@ -120,20 +146,21 @@ public class GraphSeeker : MonoBehaviour
 
         Queue<int> searchQueue = new Queue<int>();
 
-        bool[] visited = new bool[25];
+        int arrSize = rows * cols;
+        bool[] visited = new bool[arrSize];
         for (int i = 0; i < visited.Length; i++)
         {
             visited[i] = false;
         }
 
-        int[] distances = new int[25];
+        int[] distances = new int[arrSize];
         for (int i = 0; i < distances.Length; i++)
         {
             distances[i] = int.MaxValue;
         }
         distances[currBlock] = 0;
 
-        int[] previous = new int[25];
+        int[] previous = new int[arrSize];
         for (int i = 0; i < previous.Length; i++)
         {
             previous[i] = int.MaxValue;
@@ -172,64 +199,82 @@ public class GraphSeeker : MonoBehaviour
 
     private void removeBlockFromGraph(int block)
     {
-        if (!(block == 0 || block == 5 || block == 10 || block == 15 || block == 20))
+        if (this.removedBlocks.Contains(block))
+        {
+            return;
+        }
+        // Debug.Log($"Removing {block}");
+        this.removedBlocks.Add(block);
+        if (!(EnumerableUtility.Range(0, rows * cols - cols + 1, cols).Contains(block)))
         {
             // W
             this.blockGraph[block, block - 1] = false;
             this.blockGraph[block - 1, block] = false;
 
-            // NW
-            this.blockGraph[block, block - 6] = false;
-            this.blockGraph[block - 6, block] = false;
+            if (block >= cols)
+            {
+                // NW
+                this.blockGraph[block, block - (cols + 1)] = false;
+                this.blockGraph[block - (cols + 1), block] = false;
+            }
 
-            // SW
-            this.blockGraph[block, block + 4] = false;
-            this.blockGraph[block + 4, block] = false;
+            if (block < rows * (cols - 1))
+            {
+                // SW
+                this.blockGraph[block, block + (cols - 1)] = false;
+                this.blockGraph[block + (cols - 1), block] = false;
+            }
         }
 
-        if (!(block >= 0 && block <= 4))
+        if (!(block >= 0 && block <= cols - 1))
         {
             // N
-            this.blockGraph[block, block - 5] = false;
-            this.blockGraph[block - 5, block] = false;
+            this.blockGraph[block, block - cols] = false;
+            this.blockGraph[block - cols, block] = false;
         }
 
-        if (!(block >= 20 && block <= 24))
+        if (!(block >= rows * cols - cols && block <= rows * cols - 1))
         {
             // S
-            this.blockGraph[block, block + 5] = false;
-            this.blockGraph[block + 5, block] = false;
+            this.blockGraph[block, block + cols] = false;
+            this.blockGraph[block + cols, block] = false;
         }
 
-        if (!(block == 4 || block == 9 || block == 14 || block == 19 || block == 24))
+        if (!EnumerableUtility.Range(cols - 1, cols * rows, cols).Contains(block))
         {
             // E
             this.blockGraph[block, block + 1] = false;
             this.blockGraph[block + 1, block] = false;
 
-            // NE
-            this.blockGraph[block, block - 4] = false;
-            this.blockGraph[block - 4, block] = false;
+            if (block >= cols)
+            {
+                // NE
+                this.blockGraph[block, block - (cols - 1)] = false;
+                this.blockGraph[block - (cols - 1), block] = false;
+            }
 
-            // SE
-            this.blockGraph[block, block + 6] = false;
-            this.blockGraph[block + 6, block] = false;
+            if (block < rows * (cols - 1))
+            {
+                // SE
+                this.blockGraph[block, block + (cols + 1)] = false;
+                this.blockGraph[block + (cols + 1), block] = false;
+            }
         }
     }
 
     private Vector2 mapBlockToCoordinates(int blockNumber)
     {
-        int row = blockNumber / 5;
-        int col = blockNumber % 5;
-        return new Vector2(-4f + col + 0.5f, 3 - row - 0.5f);
+        int row = blockNumber / cols;
+        int col = blockNumber % cols;
+        return new Vector2(-(this.originPoint.x) + col + 0.5f, this.originPoint.y - row - 0.5f);
     }
 
     private int mapCoordinatesToBlock(Vector2 coord)
     {
         float x = coord.x;
         float y = coord.y;
-        int col = Mathf.RoundToInt(x + 4f - 0.5f);
-        int row = Mathf.RoundToInt(-y + 3f - 0.5f);
-        return row * 5 + col;
+        int col = Mathf.RoundToInt(x + this.originPoint.x - 0.5f);
+        int row = Mathf.RoundToInt(-y + this.originPoint.y - 0.5f);
+        return row * cols + col;
     }
 }
