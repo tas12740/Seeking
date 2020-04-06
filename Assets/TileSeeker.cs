@@ -3,6 +3,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Text;
+using System.Linq;
 
 public class TileSeeker : MonoBehaviour
 {
@@ -28,6 +29,10 @@ public class TileSeeker : MonoBehaviour
         FindCorner
     }
     private Mode currMode;
+
+    public int rows;
+    public int cols;
+    public Vector2 originPoint;
 
     private bool seesHider;
 
@@ -56,6 +61,7 @@ public class TileSeeker : MonoBehaviour
     private const float CORNERUPDATEPOSITIVE = 1f;
     private Stack<int> path = new Stack<int>();
     private int goalBlock = -1;
+    private Collider2D innerWallCollider;
 
     private double lookingDirection = 0;
     private float currRotation = 0;
@@ -81,7 +87,11 @@ public class TileSeeker : MonoBehaviour
         line.positionCount = 2;
         line.material.color = Color.black;
 
-        edges = new Map[36, 36];
+        this.innerWallCollider = GameObject.FindGameObjectsWithTag("Inner")[0].GetComponent<Collider2D>() as Collider2D;
+
+        int finalVertex = (this.rows + 1) * (this.cols + 1);
+        // Debug.Log($"Final vertex: {finalVertex}");
+        edges = new Map[finalVertex + 1, finalVertex + 1];
 
         for (int r = 0; r < edges.GetLength(0); r++)
         {
@@ -92,68 +102,88 @@ public class TileSeeker : MonoBehaviour
             }
         }
 
-        for (int i = 0; i < 35; i++)
+        for (int i = 0; i < finalVertex; i++)
         {
             edges[i, i + 1] = Map.Unknown;
             edges[i + 1, i] = Map.Unknown;
-            if (i + 6 < 36)
+            if (i + (cols + 1) < finalVertex)
             {
-                edges[i, i + 6] = Map.Unknown;
-                edges[i + 6, i] = Map.Unknown;
+                edges[i, i + (cols + 1)] = Map.Unknown;
+                edges[i + (cols + 1), i] = Map.Unknown;
             }
         }
 
         // generate the outer walls
-        for (int i = 0; i <= 4; i++)
+        for (int i = 0; i <= this.cols; i++)
         {
             edges[i, i + 1] = Map.OuterWall;
             edges[i + 1, i] = Map.OuterWall;
         }
-        for (int i = 5; i <= 29; i += 6)
+        for (int i = this.cols; i < finalVertex - 1; i += (this.cols + 1))
         {
-            edges[i, i + 6] = Map.OuterWall;
-            edges[i + 6, i] = Map.OuterWall;
+            edges[i, i + (cols + 1)] = Map.OuterWall;
+            edges[i + (cols + 1), i] = Map.OuterWall;
         }
-        for (int i = 0; i <= 24; i += 6)
+        for (int i = 0; i <= (finalVertex - (this.cols + 1)); i += (this.cols + 1))
         {
-            edges[i, i + 6] = Map.OuterWall;
-            edges[i + 6, i] = Map.OuterWall;
+            edges[i, i + (this.cols + 1)] = Map.OuterWall;
+            edges[i + (this.cols + 1), i] = Map.OuterWall;
         }
-        for (int i = 30; i < 35; i++)
+        for (int i = (finalVertex - (this.cols + 1)); i < finalVertex; i++)
         {
             edges[i, i + 1] = Map.OuterWall;
             edges[i + 1, i] = Map.OuterWall;
         }
 
-        this.blockGraph = new bool[25, 25];
-        for (int i = 0; i <= 24; i++)
+        int finalBlock = rows * cols - 1;
+        // Debug.Log($"Final block: {finalBlock}");
+
+        this.blockGraph = new bool[finalBlock + 1, finalBlock + 1];
+        for (int i = 0; i < finalBlock; i++)
         {
-            if (!(i == 4 || i == 9 || i == 14 || i == 19 || i == 24))
+            // not in the rightmost column
+            if (!EnumerableUtility.Range(cols - 1, finalBlock + 1, cols).Contains(i))
             {
+                // E
                 blockGraph[i, i + 1] = true;
                 blockGraph[i + 1, i] = true;
 
-                if (i < 20)
+                if (i < finalBlock - cols)
                 {
-                    blockGraph[i, i + 6] = true;
-                    blockGraph[i + 6, i] = true;
-                }
-
-                if (i > 4)
-                {
-                    blockGraph[i, i - 4] = true;
-                    blockGraph[i - 4, i] = true;
+                    // SE
+                    blockGraph[i, i + (cols + 1)] = true;
+                    blockGraph[i + (cols + 1), i] = true;
                 }
             }
-            if (i < 20)
+            if (i < (finalBlock + 1 - cols))
             {
-                blockGraph[i, i + 5] = true;
-                blockGraph[i + 5, i] = true;
+                // S
+                blockGraph[i, i + cols] = true;
+                blockGraph[i + cols, i] = true;
+            }
+            if (i >= cols)
+            {
+                // N
+                blockGraph[i, i - cols] = true;
+                blockGraph[i - cols, i] = true;
+            }
+            if (!EnumerableUtility.Range(0, finalBlock + 2 - cols, cols).Contains(i))
+            {
+                // W
+                blockGraph[i, i - 1] = true;
+                blockGraph[i - 1, i] = true;
+
+                if (i < (finalBlock + 1 - cols))
+                {
+                    // SW
+                    blockGraph[i, i + (cols - 1)] = true;
+                    blockGraph[i + (cols - 1), i] = true;
+                }
             }
         }
 
         this.locationMap = new Dictionary<int, bool>();
-        for (int i = 0; i < 25; i++)
+        for (int i = 0; i < rows * cols; i++)
         {
             this.locationMap.Add(i, false);
         }
@@ -271,6 +301,7 @@ public class TileSeeker : MonoBehaviour
                 // Debug.Log(hit.point);
 
                 bool seesInnerWall = markEdges(this.transform.position, hit.point, new Vector2(dir.x, dir.y));
+                // Debug.Log($"Sees Inner Wall: {seesInnerWall}, Is On Wall: {isOnSeenWall(hit.point)}");
                 if (seesInnerWall && !this.isOnSeenWall(hit.point))
                 {
                     this.currMode = Mode.ScanWallStart;
@@ -307,7 +338,9 @@ public class TileSeeker : MonoBehaviour
             bool horizontal = Mathf.Abs(one.y - two.y) < Mathf.Pow(10, -3);
             if (horizontal)
             {
-                bool onWall = Mathf.Abs(point.y - one.y) < Mathf.Pow(10, -3);
+                float minX = Mathf.Min(one.x, two.x);
+                float maxX = Mathf.Max(one.x, two.x);
+                bool onWall = Mathf.Abs(point.y - one.y) < Mathf.Pow(10, -3) && point.x <= maxX && point.x >= minX;
                 if (onWall)
                 {
                     return true;
@@ -315,7 +348,9 @@ public class TileSeeker : MonoBehaviour
             }
             else
             {
-                bool onWall = Mathf.Abs(point.x - one.x) < Mathf.Pow(10, -3);
+                float minY = Mathf.Min(one.y, two.y);
+                float maxY = Mathf.Max(one.y, two.y);
+                bool onWall = Mathf.Abs(point.x - one.x) < Mathf.Pow(10, -3) && point.y <= maxY && point.y >= minY;
                 if (onWall)
                 {
                     return true;
@@ -327,17 +362,19 @@ public class TileSeeker : MonoBehaviour
 
     private void findCorner()
     {
-        Debug.Log("Finding corner!");
         if (this.goalBlock == -1)
         {
             Vector2 nodeLocation = this.closestNode(this.cornerLocation);
+            // Debug.Log($"Node location: {nodeLocation}");
             float node = Mathf.Round(this.mapNode(nodeLocation.y, nodeLocation.x));
-            ArrayList edges = this.edgesForNode(node);
+            // Debug.Log($"Node: {node}");
+            List<Vector2> edges = this.edgesForNode(node);
 
-            Vector2 top = (Vector2)edges[0];
-            Vector2 right = (Vector2)edges[1];
-            Vector2 left = (Vector2)edges[2];
-            Vector2 down = (Vector2)edges[3];
+            Vector2 top = edges[0];
+            Vector2 right = edges[1];
+            Vector2 left = edges[2];
+            Vector2 down = edges[3];
+            // Debug.Log($"{top}, {right}, {down}, {left}");
 
             Map topMap = this.edges[Mathf.RoundToInt(top.x), Mathf.RoundToInt(top.y)];
             Map rightMap = this.edges[Mathf.RoundToInt(right.x), Mathf.RoundToInt(right.y)];
@@ -349,12 +386,12 @@ public class TileSeeker : MonoBehaviour
             if (blocks.Count == 0)
             {
                 Debug.Log($"Found no blocks! {this.cornerLocation}");
-                // Debug.Log($"{topMap}-{rightMap}-{downMap}-{leftMap}");
+                Debug.Log($"{topMap}-{rightMap}-{downMap}-{leftMap}");
                 Debug.Break();
             }
 
             int blockChoice = (int)blocks[this.random.Next(blocks.Count)];
-            Debug.Log($"Block choice: {blockChoice}");
+            // Debug.Log($"Block choice: {blockChoice}");
 
             this.goalBlock = blockChoice;
         }
@@ -380,20 +417,21 @@ public class TileSeeker : MonoBehaviour
 
         Queue<int> searchQueue = new Queue<int>();
 
-        bool[] visited = new bool[25];
+        int arrLength = cols * rows;
+        bool[] visited = new bool[arrLength];
         for (int i = 0; i < visited.Length; i++)
         {
             visited[i] = false;
         }
 
-        int[] distances = new int[25];
+        int[] distances = new int[arrLength];
         for (int i = 0; i < distances.Length; i++)
         {
             distances[i] = int.MaxValue;
         }
         distances[currBlock] = 0;
 
-        int[] previous = new int[25];
+        int[] previous = new int[arrLength];
         for (int i = 0; i < previous.Length; i++)
         {
             previous[i] = int.MaxValue;
@@ -434,19 +472,7 @@ public class TileSeeker : MonoBehaviour
     {
         HashSet<int> blocks = new HashSet<int>();
 
-        int countUnknown = 0;
-        foreach (Map map in new Map[] { topMap, leftMap, rightMap, downMap })
-        {
-            if (map == Map.Unknown)
-            {
-                countUnknown++;
-            }
-        }
-        // if (countUnknown >= 2)
-        // {
-        //     List<int> empty = new List<int>();
-        //     return empty;
-        // }
+        int countUnknown = (new List<Map> { topMap, leftMap, rightMap, downMap }).FindAll(item => item == Map.Unknown).Count;
 
         float x = Mathf.Round(cornerLocation.x);
         float y = Mathf.Round(cornerLocation.y);
@@ -597,12 +623,12 @@ public class TileSeeker : MonoBehaviour
 
             Vector2 nodeLocation = this.closestNode(newLocation);
             float node = Mathf.Round(this.mapNode(nodeLocation.y, nodeLocation.x));
-            ArrayList edges = this.edgesForNode(node);
+            List<Vector2> edges = this.edgesForNode(node);
 
-            Vector2 top = (Vector2)edges[0];
-            Vector2 right = (Vector2)edges[1];
-            Vector2 left = (Vector2)edges[2];
-            Vector2 down = (Vector2)edges[3];
+            Vector2 top = edges[0];
+            Vector2 right = edges[1];
+            Vector2 left = edges[2];
+            Vector2 down = edges[3];
 
             topMap = this.edges[Mathf.RoundToInt(top.x), Mathf.RoundToInt(top.y)];
             rightMap = this.edges[Mathf.RoundToInt(right.x), Mathf.RoundToInt(right.y)];
@@ -611,30 +637,55 @@ public class TileSeeker : MonoBehaviour
 
             return this.openBlocks(newLocation, topMap, leftMap, rightMap, downMap);
         }
+        else if (countUnknown == 2)
+        {
+            if (leftMap == Map.InnerWall && downMap == Map.InnerWall)
+            {
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y - 0.5f)));
+            }
+            else if (leftMap == Map.InnerWall && topMap == Map.InnerWall)
+            {
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y + 0.5f)));
+            }
+            else if (rightMap == Map.InnerWall && topMap == Map.InnerWall)
+            {
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y + 0.5f)));
+            }
+            else if (rightMap == Map.InnerWall && downMap == Map.InnerWall)
+            {
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y - 0.5f)));
+            }
+
+        }
 
         List<int> res = new List<int>();
+        StringBuilder sb = new StringBuilder();
+        sb.Append("Blocks: ");
         foreach (int i in blocks)
         {
-            Debug.Log($"Block: {i}");
+            sb.Append($"{i},");
             res.Add(i);
         }
+        Debug.Log(sb.ToString());
 
         return res;
     }
 
-    private ArrayList edgesForNode(float node)
+    private List<Vector2> edgesForNode(float node)
     {
-        ArrayList edges = new ArrayList();
+        List<Vector2> edges = new List<Vector2>();
         int intNode = Mathf.RoundToInt(node);
-        if (!(intNode >= 0 && intNode <= 5))
+        // up
+        if (!(intNode >= 0 && intNode <= cols))
         {
-            edges.Add(new Vector2(node - 6, node));
+            edges.Add(new Vector2(node - (cols + 1), node));
         }
         else
         {
             edges.Add(Vector2.zero);
         }
-        if (!(intNode == 5 || intNode == 11 || intNode == 17 || intNode == 29 || intNode == 35))
+        //right 
+        if (!(EnumerableUtility.Range(cols, (cols + 1) * (rows + 1) + 1, cols + 1).Contains(intNode)))
         {
             edges.Add(new Vector2(node, node + 1));
         }
@@ -642,7 +693,8 @@ public class TileSeeker : MonoBehaviour
         {
             edges.Add(Vector2.zero);
         }
-        if (!(intNode == 0 || intNode == 6 || intNode == 12 || intNode == 18 || intNode == 24 || intNode == 30))
+        //left
+        if (!(EnumerableUtility.Range(0, (cols + 1) * (rows + 1) - cols + 1, cols + 1).Contains(intNode)))
         {
             edges.Add(new Vector2(node - 1, node));
         }
@@ -650,9 +702,10 @@ public class TileSeeker : MonoBehaviour
         {
             edges.Add(Vector2.zero);
         }
-        if (!(intNode >= 30 && intNode <= 35))
+        //down
+        if (!(intNode >= (cols + 1) * (rows + 1) - cols && intNode <= (rows + 1) * (cols + 1)))
         {
-            edges.Add(new Vector2(node, node + 6));
+            edges.Add(new Vector2(node, node + (cols + 1)));
         }
         else
         {
@@ -663,7 +716,9 @@ public class TileSeeker : MonoBehaviour
 
     private Vector2 closestNode(Vector2 location)
     {
-        return new Vector2(location.x + 4, -location.y + 3);
+        float xLocation = location.x + originPoint.x;
+        float yLocation = -location.y + originPoint.y;
+        return new Vector2(xLocation, yLocation);
     }
 
     private void scanWallStart()
@@ -736,11 +791,11 @@ public class TileSeeker : MonoBehaviour
     {
         if (this.horizontalWall)
         {
-            return (point.y - this.originalPoint.y) > Mathf.Pow(10, -3);
+            return Mathf.Abs(point.y - this.originalPoint.y) > Mathf.Pow(10, -3);
         }
         else
         {
-            return (point.x - this.originalPoint.x) > Mathf.Pow(10, -3);
+            return Mathf.Abs(point.x - this.originalPoint.x) > Mathf.Pow(10, -3);
         }
     }
 
@@ -779,7 +834,7 @@ public class TileSeeker : MonoBehaviour
             return;
         }
 
-        if (hit.collider.tag.Equals("Outer") || Mathf.Abs(this.currCornerDistance - this.lastCornerDistance) > 0.5f || this.leftWall(this.currCornerSearch))
+        if (hit.collider.tag.Equals("Outer") || Mathf.Abs(this.currCornerDistance - this.lastCornerDistance) > 0.5f || this.leftWall(this.currCornerSearch) || this.isOnSeenWall(currCornerSearch))
         {
             Vector2 coordinates = new Vector2(Mathf.Round(this.lastCornerSearch.x), Mathf.Round(this.lastCornerSearch.y));
             Debug.Log($"Coordinates of a corner: {coordinates}");
@@ -787,7 +842,7 @@ public class TileSeeker : MonoBehaviour
 
             // Debug.Log($"Contains coordinates {coordinates}? {this.cornersSeen.Contains(coordinates)}");
 
-            if (!this.cornersSeen.Contains(coordinates) && this.isOnInnerWall(coordinates))
+            if (!this.cornersSeen.Contains(coordinates) && this.isOnInnerWall(coordinates) && !this.isOnSeenWall(coordinates))
             {
                 if (!this.setCorner)
                 {
@@ -837,8 +892,13 @@ public class TileSeeker : MonoBehaviour
             }
             else
             {
-                Debug.Log($"Wall: ({this.otherCorner}, {coordinates})");
-                this.walls.Add((this.otherCorner, coordinates));
+                // Debug.Log($"Wall: ({this.otherCorner}, {coordinates})");
+                this.addWall((this.otherCorner, coordinates));
+                // Debug.Log("Walls:");
+                // foreach ((Vector2, Vector2) wall in this.walls)
+                // {
+                //     Debug.Log(wall);
+                // }
                 this.otherCorner = 200 * Vector2.one;
 
                 float rotationAmount = (float)(this.originalDirectionBeforeWallScan - this.lookingDirection);
@@ -848,6 +908,88 @@ public class TileSeeker : MonoBehaviour
                 this.currMode = Mode.FindCorner;
                 return;
             }
+        }
+    }
+
+    private void addWall((Vector2, Vector2) newWall)
+    {
+        for (int i = this.walls.Count - 1; i >= 0; i--)
+        {
+            if (this.wallIntersect(newWall, this.walls[i]))
+            {
+                (Vector2, Vector2) currWall = this.walls[i];
+                this.walls[i] = this.mergeWalls(currWall, newWall);
+                return;
+            }
+        }
+        this.walls.Add(newWall);
+    }
+
+    private bool wallIntersect((Vector2, Vector2) wallOne, (Vector2, Vector2) wallTwo)
+    {
+        bool wallOneHorizontal = Mathf.Abs(wallOne.Item1.y - wallOne.Item2.y) < Mathf.Pow(10, -3);
+        bool wallTwoHorizontal = Mathf.Abs(wallTwo.Item1.y - wallTwo.Item2.y) < Mathf.Pow(10, -3);
+        if (wallOneHorizontal != wallTwoHorizontal)
+        {
+            return false;
+        }
+
+        if (wallOneHorizontal)
+        {
+            if (Mathf.Abs(wallOne.Item1.y - wallTwo.Item1.y) >= Mathf.Pow(10, -3))
+            {
+                return false;
+            }
+            float minXOne = Mathf.Min(wallOne.Item1.x, wallOne.Item2.x);
+            float maxXOne = Mathf.Max(wallOne.Item1.x, wallOne.Item2.x);
+
+            float minXTwo = Mathf.Min(wallTwo.Item1.x, wallTwo.Item2.x);
+            float maxXTwo = Mathf.Max(wallTwo.Item1.x, wallTwo.Item2.x);
+            return (!(minXTwo > maxXOne || minXOne > maxXTwo));
+        }
+        else
+        {
+            if (Mathf.Abs(wallOne.Item1.x - wallTwo.Item1.x) >= Mathf.Pow(10, -3))
+            {
+                return false;
+            }
+            float minYOne = Mathf.Min(wallOne.Item1.y, wallOne.Item2.y);
+            float maxYOne = Mathf.Max(wallOne.Item1.y, wallOne.Item2.y);
+
+            float minYTwo = Mathf.Min(wallTwo.Item1.y, wallTwo.Item2.y);
+            float maxYTwo = Mathf.Max(wallTwo.Item1.y, wallTwo.Item2.y);
+
+            return (!(minYTwo > maxYOne || minYOne > maxYTwo));
+        }
+    }
+
+    private (Vector2, Vector2) mergeWalls((Vector2, Vector2) wallOne, (Vector2, Vector2) wallTwo)
+    {
+        // we assume that the walls are aligned correctly
+        bool horizontal = Mathf.Abs(wallOne.Item1.y - wallOne.Item2.y) < Mathf.Pow(10, -3);
+        if (horizontal)
+        {
+            float[] x = new float[] { wallOne.Item1.x, wallOne.Item2.x, wallTwo.Item1.x, wallTwo.Item2.x };
+
+            float minX = x.Min();
+            float maxX = x.Max();
+
+            float y = Mathf.Round(wallOne.Item1.y);
+            Vector2 one = new Vector2(minX, y);
+            Vector2 two = new Vector2(maxX, y);
+            return (one, two);
+        }
+        else
+        {
+            float[] y = new float[] { wallOne.Item1.y, wallOne.Item2.y, wallTwo.Item1.y, wallTwo.Item2.y };
+
+            float minY = y.Min();
+            float maxY = y.Max();
+
+            float x = Mathf.Round(wallOne.Item1.x);
+            Vector2 one = new Vector2(x, minY);
+            Vector2 two = new Vector2(x, maxY);
+            return (one, two);
         }
     }
 
@@ -934,14 +1076,16 @@ public class TileSeeker : MonoBehaviour
         else
         {
             int nextBlock = this.path.Pop();
-            if (this.removedBlocks.Contains(nextBlock))
+            Vector2 location = this.mapBlockToCoordinates(nextBlock);
+            if (this.removedBlocks.Contains(nextBlock) || this.innerWallCollider.OverlapPoint(location))
             {
                 Debug.Log("Editing path ...");
+                this.removeBlockFromGraph(nextBlock);
                 this.currMode = Mode.FindCorner;
                 return;
             }
 
-            Vector2 location = this.mapBlockToCoordinates(nextBlock);
+
             this.transform.position = new Vector3(location.x, location.y, 0);
         }
     }
@@ -968,10 +1112,11 @@ public class TileSeeker : MonoBehaviour
 
         this.markInMyDirection();
 
-
         this.lookingDirection += this.moveRotation;
         this.transform.Rotate(new Vector3(0, 0, this.moveRotation));
         this.currMoveRotation += this.moveRotation;
+
+        this.markInMyDirection();
     }
 
     private Vector3 movement()
@@ -1057,8 +1202,13 @@ public class TileSeeker : MonoBehaviour
 
     private bool isOnInnerWall(Vector2 point)
     {
-        bool yOnOuterWall = (Mathf.Abs(point.y - 3f) < Mathf.Pow(10, -3)) || (Mathf.Abs(point.y + 2f) < Mathf.Pow(10, -3));
-        bool xOnOuterWall = (Mathf.Abs(point.x - 1f) < Mathf.Pow(10, -3)) || (Mathf.Abs(point.x + 4f) < Mathf.Pow(10, -3));
+        float negativeY = rows - this.originPoint.y;
+        float positiveY = this.originPoint.y;
+
+        float positiveX = cols - this.originPoint.x;
+        float negativeX = this.originPoint.x;
+        bool yOnOuterWall = (Mathf.Abs(point.y - positiveY) < Mathf.Pow(10, -3)) || (Mathf.Abs(point.y + negativeY) < Mathf.Pow(10, -3));
+        bool xOnOuterWall = (Mathf.Abs(point.x - positiveX) < Mathf.Pow(10, -3)) || (Mathf.Abs(point.x + negativeX) < Mathf.Pow(10, -3));
 
         return !xOnOuterWall && !yOnOuterWall;
     }
@@ -1121,10 +1271,15 @@ public class TileSeeker : MonoBehaviour
 
             float epsilon = Mathf.Pow(10, -3);
 
-            for (float x = -4; x <= 1; x++)
+            float xStart = -this.originPoint.x;
+            float xEnd = cols - this.originPoint.x;
+
+            float yStart = -(rows - this.originPoint.y);
+            float yEnd = this.originPoint.y;
+            for (float x = xStart; x <= xEnd; x++)
             {
                 float currY = slope * x + intercept;
-                if (currY > 3 || currY < -2)
+                if (currY > yEnd || currY < yStart)
                 {
                     continue;
                 }
@@ -1150,10 +1305,10 @@ public class TileSeeker : MonoBehaviour
                     }
                 }
             }
-            for (float y = -2; y <= 3; y++)
+            for (float y = yStart; y <= yEnd; y++)
             {
                 float currX = (y - intercept) / slope;
-                if (currX < -4 || currX > 1)
+                if (currX < xStart || currX > xEnd)
                 {
                     continue;
                 }
@@ -1247,21 +1402,21 @@ public class TileSeeker : MonoBehaviour
         int minNode = Mathf.RoundToInt(Mathf.Min(nodeOne, nodeTwo));
         int maxNode = Mathf.RoundToInt(Mathf.Max(nodeOne, nodeTwo));
 
-        // see if horizontal (i, i+1) or vertical (i, i+5)
-        bool horizontal = (maxNode - minNode) == 6;
+        // see if horizontal or vertical
+        bool horizontal = (maxNode - minNode) == (cols + 1);
 
         if (horizontal)
         {
-            int colBarrier = minNode % 6;
-            int row = (maxNode / 6) - 1;
+            int colBarrier = minNode % (cols + 1);
+            int row = (maxNode / (cols + 1)) - 1;
 
-            return ((row * 5 + (colBarrier - 1)), row * 5 + colBarrier, horizontal);
+            return ((row * cols + (colBarrier - 1)), row * cols + colBarrier, horizontal);
         }
         else
         {
-            int row = (minNode / 6) - 1;
-            int col = (maxNode % 6) - 1;
-            return ((row * 5 + col), (row * 5 + col + 5), horizontal);
+            int row = (minNode / (cols + 1)) - 1;
+            int col = (maxNode % (cols + 1)) - 1;
+            return ((row * cols + col), (row * cols + col + cols), horizontal);
         }
     }
 
@@ -1281,12 +1436,12 @@ public class TileSeeker : MonoBehaviour
                 Map curr = this.edges[x, y];
 
                 float node = Mathf.Round(x);
-                ArrayList edges = this.edgesForNode(node);
+                List<Vector2> edges = this.edgesForNode(node);
 
-                Vector2 top = (Vector2)edges[0];
-                Vector2 right = (Vector2)edges[1];
-                Vector2 left = (Vector2)edges[2];
-                Vector2 down = (Vector2)edges[3];
+                Vector2 top = edges[0];
+                Vector2 right = edges[1];
+                Vector2 left = edges[2];
+                Vector2 down = edges[3];
 
                 Map topMap = this.edges[Mathf.RoundToInt(top.x), Mathf.RoundToInt(top.y)];
                 Map rightMap = this.edges[Mathf.RoundToInt(right.x), Mathf.RoundToInt(right.y)];
@@ -1345,6 +1500,7 @@ public class TileSeeker : MonoBehaviour
             else
             {
                 this.drawEdge(this.mapEdge(x, y), Color.red);
+                // Debug.Log($"X: {x}, Y: {y}");
                 this.edges[x, y] = Map.InnerWall;
                 this.edges[y, x] = Map.InnerWall;
 
@@ -1397,9 +1553,21 @@ public class TileSeeker : MonoBehaviour
                         this.drawEdge(this.mapEdge(x, y), Color.red);
                         break;
                     case Map.Unknown:
-                        this.drawEdge(this.mapEdge(x, y), Color.green);
-                        this.edges[x, y] = Map.Seen;
-                        this.edges[y, x] = Map.Seen;
+                        (Vector2 one, Vector2 two) = this.mapEdge(vec.x, vec.y);
+                        if (Mathf.Abs(one.y - two.y) < Mathf.Pow(10, -3))
+                        {
+                            // on the same horizontal line
+                            float xCurr = (one.x + two.x) / 2;
+                            float yCurr = (one.y + two.y) / 2;
+                            Vector3 faceDirection = new Vector3(xCurr, yCurr, 0) - this.transform.position;
+
+                            int playerMask = ~(1 << 8);
+                            RaycastHit2D hit = Physics2D.Raycast(this.transform.position, faceDirection, Mathf.Infinity, playerMask);
+                            this.markEdges(this.transform.position, hit.point, faceDirection);
+                        }
+                        // this.drawEdge(this.mapEdge(x, y), Color.green);
+                        // this.edges[x, y] = Map.Seen;
+                        // this.edges[y, x] = Map.Seen;
                         break;
                     default:
                         break;
@@ -1441,50 +1609,50 @@ public class TileSeeker : MonoBehaviour
         {
             return;
         }
-        Debug.Log($"Removing {block}");
+        // Debug.Log($"Removing {block}");
         this.removedBlocks.Add(block);
-        if (!(block == 0 || block == 5 || block == 10 || block == 15 || block == 20))
+        if (!(EnumerableUtility.Range(0, rows * cols - cols + 1, cols).Contains(block)))
         {
             // W
             this.blockGraph[block, block - 1] = false;
             this.blockGraph[block - 1, block] = false;
 
             // NW
-            this.blockGraph[block, block - 6] = false;
-            this.blockGraph[block - 6, block] = false;
+            this.blockGraph[block, block - (cols + 1)] = false;
+            this.blockGraph[block - (cols + 1), block] = false;
 
             // SW
-            this.blockGraph[block, block + 4] = false;
-            this.blockGraph[block + 4, block] = false;
+            this.blockGraph[block, block + (cols - 1)] = false;
+            this.blockGraph[block + (cols - 1), block] = false;
         }
 
-        if (!(block >= 0 && block <= 4))
+        if (!(block >= 0 && block <= cols - 1))
         {
             // N
-            this.blockGraph[block, block - 5] = false;
-            this.blockGraph[block - 5, block] = false;
+            this.blockGraph[block, block - cols] = false;
+            this.blockGraph[block - cols, block] = false;
         }
 
-        if (!(block >= 20 && block <= 24))
+        if (!(block >= rows * cols - cols && block <= rows * cols - 1))
         {
             // S
-            this.blockGraph[block, block + 5] = false;
-            this.blockGraph[block + 5, block] = false;
+            this.blockGraph[block, block + cols] = false;
+            this.blockGraph[block + cols, block] = false;
         }
 
-        if (!(block == 4 || block == 9 || block == 14 || block == 19 || block == 24))
+        if (!EnumerableUtility.Range(cols - 1, cols * rows, cols).Contains(block))
         {
             // E
             this.blockGraph[block, block + 1] = false;
             this.blockGraph[block + 1, block] = false;
 
             // NE
-            this.blockGraph[block, block - 4] = false;
-            this.blockGraph[block - 4, block] = false;
+            this.blockGraph[block, block - (cols - 1)] = false;
+            this.blockGraph[block - (cols - 1), block] = false;
 
             // SE
-            this.blockGraph[block, block + 6] = false;
-            this.blockGraph[block + 6, block] = false;
+            this.blockGraph[block, block + (cols + 1)] = false;
+            this.blockGraph[block + (cols + 1), block] = false;
         }
     }
 
@@ -1493,20 +1661,20 @@ public class TileSeeker : MonoBehaviour
         ArrayList res = new ArrayList();
         int lowNode = Mathf.RoundToInt(Mathf.Min(nodeOne, nodeTwo));
         int highNode = Mathf.RoundToInt(Mathf.Max(nodeOne, nodeTwo));
-        if (Mathf.Abs(highNode - lowNode - 7f) < Mathf.Pow(10, -3))
+        if (Mathf.Abs(highNode - lowNode - (cols + 2)) < Mathf.Pow(10, -3))
         {
             // NW => SE
-            if (lowNode + 6 <= 35)
+            if (lowNode + (cols + 1) <= (rows + 1) * (cols + 1))
             {
-                res.Add(new Vector2(lowNode, lowNode + 6));
+                res.Add(new Vector2(lowNode, lowNode + (cols + 1)));
             }
-            if (lowNode + 1 <= 35)
+            if (lowNode + 1 <= (rows + 1) * (cols + 1))
             {
                 res.Add(new Vector2(lowNode, lowNode + 1));
             }
-            if (highNode - 6 >= 0)
+            if (highNode - (cols + 1) >= 0)
             {
-                res.Add(new Vector2(highNode - 6, highNode));
+                res.Add(new Vector2(highNode - (cols + 1), highNode));
             }
             if (highNode - 1 >= 0)
             {
@@ -1516,20 +1684,19 @@ public class TileSeeker : MonoBehaviour
         else
         {
             // NE => SW
-            // difference is 5
-            if (lowNode + 6 <= 35)
+            if (lowNode + (cols + 1) <= (rows + 1) * (cols + 1))
             {
-                res.Add(new Vector2(lowNode, lowNode + 6));
+                res.Add(new Vector2(lowNode, lowNode + (cols + 1)));
             }
             if (lowNode - 1 >= 0)
             {
                 res.Add(new Vector2(lowNode - 1, lowNode));
             }
-            if (highNode - 6 >= 0)
+            if (highNode - (cols + 1) >= 0)
             {
-                res.Add(new Vector2(highNode - 6, highNode));
+                res.Add(new Vector2(highNode - (cols + 1), highNode));
             }
-            if (highNode + 1 <= 35)
+            if (highNode + 1 <= (rows + 1) * (cols + 1))
             {
                 res.Add(new Vector2(highNode, highNode + 1));
             }
@@ -1546,17 +1713,17 @@ public class TileSeeker : MonoBehaviour
         {
             // Debug.Log("Both zero");
             // we have a corner situation here
-            float col = point.x + 4;
-            float row = -point.y + 3;
+            float col = point.x + this.originPoint.x;
+            float row = -point.y + this.originPoint.y;
             float node = mapNode(row, col);
             return new Vector2(node, node);
         }
         else if (xInt)
         {
             // Debug.Log("X Zero");
-            float col = point.x + 4;
-            float lowRow = Mathf.Min(-Mathf.Floor(point.y) + 3, -Mathf.Ceil(point.y) + 3);
-            float highRow = Mathf.Max(-Mathf.Floor(point.y) + 3, -Mathf.Ceil(point.y) + 3);
+            float col = point.x + this.originPoint.x;
+            float lowRow = Mathf.Min(-Mathf.Floor(point.y) + this.originPoint.y, -Mathf.Ceil(point.y) + this.originPoint.y);
+            float highRow = Mathf.Max(-Mathf.Floor(point.y) + this.originPoint.y, -Mathf.Ceil(point.y) + this.originPoint.y);
             float lowNode = this.mapNode(lowRow, col);
             float highNode = this.mapNode(highRow, col);
             return new Vector2(lowNode, highNode);
@@ -1564,9 +1731,9 @@ public class TileSeeker : MonoBehaviour
         else if (yInt)
         {
             // Debug.Log("Y Zero");
-            float row = -point.y + 3;
-            float lowCol = Mathf.Min(Mathf.Floor(point.x) + 4, Mathf.Ceil(point.x) + 4);
-            float highCol = Mathf.Max(Mathf.Floor(point.x) + 4, Mathf.Ceil(point.x) + 4);
+            float row = -point.y + this.originPoint.y;
+            float lowCol = Mathf.Min(Mathf.Floor(point.x) + this.originPoint.x, Mathf.Ceil(point.x) + this.originPoint.x);
+            float highCol = Mathf.Max(Mathf.Floor(point.x) + this.originPoint.x, Mathf.Ceil(point.x) + this.originPoint.x);
             float lowNode = this.mapNode(row, lowCol);
             float highNode = this.mapNode(row, highCol);
             return new Vector2(lowNode, highNode);
@@ -1580,32 +1747,32 @@ public class TileSeeker : MonoBehaviour
 
     private float mapNode(float row, float col)
     {
-        return row * 6 + col;
+        return row * (cols + 1) + col;
     }
 
     private (Vector2, Vector2) mapEdge(float nodeOne, float nodeTwo)
     {
         float rowOne = 0, colOne = 0, rowTwo = 0, colTwo = 0;
-        for (float r = 0; r <= 5; r++)
+        for (float r = 0; r <= rows; r++)
         {
-            for (float c = 0; c <= 5; c++)
+            for (float c = 0; c <= cols; c++)
             {
-                if (Mathf.Approximately(nodeOne, r * 6 + c))
+                if (Mathf.Approximately(nodeOne, r * (cols + 1) + c))
                 {
                     rowOne = r;
                     colOne = c;
                 }
-                if (Mathf.Approximately(nodeTwo, r * 6 + c))
+                if (Mathf.Approximately(nodeTwo, r * (cols + 1) + c))
                 {
                     rowTwo = r;
                     colTwo = c;
                 }
             }
         }
-        rowOne = -1 * (rowOne - 3);
-        rowTwo = -1 * (rowTwo - 3);
-        colOne = colOne - 4;
-        colTwo = colTwo - 4;
+        rowOne = -1 * (rowOne - this.originPoint.y);
+        rowTwo = -1 * (rowTwo - this.originPoint.y);
+        colOne = colOne - this.originPoint.x;
+        colTwo = colTwo - this.originPoint.x;
         if (Mathf.Abs(rowOne - rowTwo) > 1 || Mathf.Abs(colOne - colTwo) > 1)
         {
             return (new Vector2(0, 0), new Vector2(0, 0));
@@ -1632,17 +1799,17 @@ public class TileSeeker : MonoBehaviour
 
     private Vector2 mapBlockToCoordinates(int blockNumber)
     {
-        int row = blockNumber / 5;
-        int col = blockNumber % 5;
-        return new Vector2(-4f + col + 0.5f, 3 - row - 0.5f);
+        int row = blockNumber / cols;
+        int col = blockNumber % cols;
+        return new Vector2(-(this.originPoint.x) + col + 0.5f, this.originPoint.y - row - 0.5f);
     }
 
     private int mapCoordinatesToBlock(Vector2 coord)
     {
         float x = coord.x;
         float y = coord.y;
-        int col = Mathf.RoundToInt(x + 4f - 0.5f);
-        int row = Mathf.RoundToInt(-y + 3f - 0.5f);
-        return row * 5 + col;
+        int col = Mathf.RoundToInt(x + this.originPoint.x - 0.5f);
+        int row = Mathf.RoundToInt(-y + this.originPoint.y - 0.5f);
+        return row * cols + col;
     }
 }
