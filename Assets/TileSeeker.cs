@@ -7,6 +7,8 @@ using System.Linq;
 
 public class TileSeeker : MonoBehaviour
 {
+    private const int PLAYER_MASK = ~(1 << 8);
+
     private enum Map
     {
         Blank,
@@ -20,6 +22,7 @@ public class TileSeeker : MonoBehaviour
     {
         ReadyToScan,
         Scan,
+        EnvLearn,
         ReadyToMove,
         RotateToMove,
         Move,
@@ -30,6 +33,9 @@ public class TileSeeker : MonoBehaviour
     }
     private Mode currMode;
 
+    ////////////////////////////////////////
+    // SETUP VARIABLES                   //
+    //////////////////////////////////////
     public int rows;
     public int cols;
     public Vector2 originPoint;
@@ -40,13 +46,21 @@ public class TileSeeker : MonoBehaviour
     private float currMoveRotation;
     private float rotationAmountBeforeMove;
 
+    /////////////////////////////////////
+    // SCANNING VARIABLES             //
+    ///////////////////////////////////
+    private Stack<Vector3> wallPoints = new Stack<Vector3>();
+    private Stack<Vector2> currCorners = new Stack<Vector2>();
+    private bool foundCorner = false;
+
     ////////////////////////////////////////
     // WALL SCANNING VARIABLES           //
     //////////////////////////////////////
-    private List<(Vector2, Vector2)> walls = new List<(Vector2, Vector2)>();
+    private List<Wall> horizontalWalls = new List<Wall>();
+    private List<Wall> verticalWalls = new List<Wall>();
+    private List<Room> rooms = new List<Room>();
     private Vector2 originalPoint = Vector2.positiveInfinity;
     private bool horizontalWall = false;
-    private bool setCorner = false;
     private Vector2 otherCorner = 200 * Vector2.one;
     private double originalDirectionBeforeWallScan;
     private HashSet<Vector2> cornersSeen = new HashSet<Vector2>();
@@ -92,6 +106,20 @@ public class TileSeeker : MonoBehaviour
         int finalVertex = (this.rows + 1) * (this.cols + 1);
         // Debug.Log($"Final vertex: {finalVertex}");
         edges = new Map[finalVertex + 1, finalVertex + 1];
+
+        float topPoint = originPoint.y;
+        float leftPoint = -originPoint.x;
+        float rightPoint = this.cols - originPoint.x;
+        float bottomPoint = this.originPoint.y - this.rows;
+        Wall top = new Wall(new Vector2(leftPoint, topPoint), new Vector2(rightPoint, topPoint), true);
+        Wall right = new Wall(new Vector2(rightPoint, topPoint), new Vector2(rightPoint, bottomPoint), true);
+        Wall bottom = new Wall(new Vector2(leftPoint, bottomPoint), new Vector2(rightPoint, bottomPoint), true);
+        Wall left = new Wall(new Vector2(leftPoint, topPoint), new Vector2(leftPoint, bottomPoint), true);
+
+        this.horizontalWalls.Add(top);
+        this.horizontalWalls.Add(bottom);
+        this.verticalWalls.Add(left);
+        this.verticalWalls.Add(right);
 
         for (int r = 0; r < edges.GetLength(0); r++)
         {
@@ -231,11 +259,6 @@ public class TileSeeker : MonoBehaviour
         {
             this.move();
 
-            if (this.currMode == Mode.FindCorner)
-            {
-                return;
-            }
-
             if (this.path.Count == 0)
             {
                 this.currMode = Mode.ReadyToScan;
@@ -255,69 +278,18 @@ public class TileSeeker : MonoBehaviour
         }
         else if (this.currMode == Mode.Scan)
         {
-            if (this.currRotation == 360)
-            {
-                this.currMode = Mode.ReadyToMove;
-
-                this.didRotate = false;
-                this.currRotation = 0;
-            }
-            else
-            {
-                if (!this.seesHider)
-                {
-                    if (!this.didRotate && this.currRotation == 0)
-                    {
-                        this.didRotate = true;
-                    }
-                    else
-                    {
-                        this.currRotation += 45f;
-                        this.lookingDirection -= 45;
-                        this.transform.Rotate(new Vector3(0, 0, -45f));
-                    }
-                }
-
-                float xDir = (float)Math.Cos(this.lookingDirection * Mathf.Deg2Rad);
-                float yDir = (float)Math.Sin(this.lookingDirection * Mathf.Deg2Rad);
-
-                Vector3 dir = new Vector3(xDir, yDir, 0);
-
-                int playerMask = 1 << 8;
-                playerMask = ~playerMask;
-
-                RaycastHit2D hit = Physics2D.Raycast(this.transform.position, dir, Mathf.Infinity, playerMask);
-                if (hit.collider.gameObject.tag.Equals("Hider"))
-                {
-                    this.transform.position = this.transform.position + this.movement();
-                    this.seesHider = true;
-                    return;
-                }
-                else
-                {
-                    this.seesHider = false;
-                }
-
-                // Debug.Log(hit.point);
-
-                bool seesInnerWall = markEdges(this.transform.position, hit.point, new Vector2(dir.x, dir.y));
-                // Debug.Log($"Sees Inner Wall: {seesInnerWall}, Is On Wall: {isOnSeenWall(hit.point)}");
-                if (seesInnerWall && !this.isOnSeenWall(hit.point))
-                {
-                    this.currMode = Mode.ScanWallStart;
-                }
-            }
+            this.scan();
         }
         else if (this.currMode == Mode.ReadyToScan)
         {
             this.didRotate = false;
             this.currRotation = 0;
             this.currMode = Mode.Scan;
+            this.foundCorner = false;
         }
         else if (this.currMode == Mode.ScanWallStart)
         {
             this.scanWallStart();
-            this.currMode = Mode.ScanWall;
         }
         else if (this.currMode == Mode.ScanWall)
         {
@@ -327,20 +299,129 @@ public class TileSeeker : MonoBehaviour
         {
             this.findCorner();
         }
+        else if (this.currMode == Mode.EnvLearn)
+        {
+            this.mergeWalls();
+            bool madeRoom = this.makeRooms();
+
+            // Debug.Log(this.cornerLocation);
+            // decide
+            if (madeRoom)
+            {
+                Room last = this.rooms[rooms.Count - 1];
+                this.goalBlock = last.getRandBlock();
+                this.generatePath(this.mapCoordinatesToBlock(this.transform.position), this.goalBlock);
+                this.currMode = Mode.ReadyToMove;
+            }
+            else
+            {
+                this.currMode = Mode.FindCorner;
+            }
+        }
+    }
+
+    private RaycastHit2D raycast(Vector2 direction, float limit = Mathf.Infinity)
+    {
+        return Physics2D.Raycast(this.transform.position, direction, limit, PLAYER_MASK);
+    }
+
+    private void scan()
+    {
+        if (this.currRotation == 360)
+        {
+            if (this.wallPoints.Count == 0)
+            {
+                this.currMode = Mode.EnvLearn;
+            }
+            else
+            {
+                this.currMode = Mode.ScanWallStart;
+            }
+
+            this.didRotate = false;
+            this.currRotation = 0;
+            return;
+        }
+        else
+        {
+            if (!this.seesHider)
+            {
+                if (!this.didRotate && this.currRotation == 0)
+                {
+                    this.didRotate = true;
+                }
+                else
+                {
+                    this.currRotation += 45f;
+                    this.lookingDirection -= 45;
+                    this.transform.Rotate(new Vector3(0, 0, -45f));
+                }
+            }
+
+            Vector3 dir = this.myDirectionVector();
+
+            RaycastHit2D hit = Physics2D.Raycast(this.transform.position, dir, Mathf.Infinity, PLAYER_MASK);
+            if (hit.collider.gameObject.tag.Equals("Hider"))
+            {
+                this.transform.position = this.transform.position + this.movement();
+                this.seesHider = true;
+                return;
+            }
+            else
+            {
+                this.seesHider = false;
+            }
+
+            bool seesInnerWall = markEdges(this.transform.position, hit.point, new Vector2(dir.x, dir.y));
+            // Debug.Log($"Sees Inner Wall: {seesInnerWall}, Is On Wall: {isOnSeenWall(hit.point)}");
+            if (seesInnerWall && !this.isOnSeenWall(hit.point))
+            {
+                // add the point to walls to scan
+                this.wallPoints.Push(hit.point);
+            }
+        }
+    }
+
+    private Vector3 myDirectionVector(float offset = 0)
+    {
+        float xDir = (float)Math.Cos((this.lookingDirection + offset) * Mathf.Deg2Rad);
+        float yDir = (float)Math.Sin((this.lookingDirection + offset) * Mathf.Deg2Rad);
+
+        return new Vector3(xDir, yDir, 0);
+    }
+
+    private IEnumerable<Wall> getAllWalls()
+    {
+        foreach (Wall w in this.horizontalWalls)
+        {
+            yield return w;
+        }
+
+        foreach (Wall w in this.verticalWalls)
+        {
+            yield return w;
+        }
+
+        foreach (Room room in this.rooms)
+        {
+            foreach (Wall w in room.allWalls)
+            {
+                yield return w;
+            }
+        }
     }
 
     private bool isOnSeenWall(Vector2 point)
     {
-        foreach ((Vector2, Vector2) tup in this.walls)
+        foreach (Wall wall in this.getAllWalls())
         {
-            Vector2 one = tup.Item1;
-            Vector2 two = tup.Item2;
-            bool horizontal = Mathf.Abs(one.y - two.y) < Mathf.Pow(10, -3);
+            bool horizontal = wall.horizontal;
             if (horizontal)
             {
-                float minX = Mathf.Min(one.x, two.x);
-                float maxX = Mathf.Max(one.x, two.x);
-                bool onWall = Mathf.Abs(point.y - one.y) < Mathf.Pow(10, -3) && point.x <= maxX && point.x >= minX;
+                float minX = wall.xMin;
+                float maxX = wall.xMax;
+                float y = wall.yMax;
+                bool onWall = Mathf.Abs(point.y - y) < Mathf.Pow(10, -3) && point.x <= maxX && point.x >= minX;
                 if (onWall)
                 {
                     return true;
@@ -348,9 +429,10 @@ public class TileSeeker : MonoBehaviour
             }
             else
             {
-                float minY = Mathf.Min(one.y, two.y);
-                float maxY = Mathf.Max(one.y, two.y);
-                bool onWall = Mathf.Abs(point.x - one.x) < Mathf.Pow(10, -3) && point.y <= maxY && point.y >= minY;
+                float minY = wall.yMin;
+                float maxY = wall.yMax;
+                float x = wall.xMax;
+                bool onWall = Mathf.Abs(point.x - x) < Mathf.Pow(10, -3) && point.y <= maxY && point.y >= minY;
                 if (onWall)
                 {
                     return true;
@@ -364,6 +446,12 @@ public class TileSeeker : MonoBehaviour
     {
         if (this.goalBlock == -1)
         {
+            if (this.currCorners.Count == 0)
+            {
+                this.currMode = Mode.ReadyToMove;
+                return;
+            }
+            this.cornerLocation = this.currCorners.Pop();
             Vector2 nodeLocation = this.closestNode(this.cornerLocation);
             // Debug.Log($"Node location: {nodeLocation}");
             float node = Mathf.Round(this.mapNode(nodeLocation.y, nodeLocation.x));
@@ -399,14 +487,14 @@ public class TileSeeker : MonoBehaviour
 
         this.generatePath(this.mapCoordinatesToBlock(this.transform.position), this.goalBlock);
 
-        StringBuilder sb = new StringBuilder();
-        int firstBlock = this.mapCoordinatesToBlock(this.transform.position);
-        sb.Append($"Path: {firstBlock}");
-        foreach (int block in this.path)
-        {
-            sb.Append($" -> {block}");
-        }
-        Debug.Log(sb.ToString());
+        // StringBuilder sb = new StringBuilder();
+        // int firstBlock = this.mapCoordinatesToBlock(this.transform.position);
+        // sb.Append($"Path: {firstBlock}");
+        // foreach (int block in this.path)
+        // {
+        //     sb.Append($" -> {block}");
+        // }
+        // Debug.Log(sb.ToString());
 
         this.currMode = Mode.ReadyToMove;
     }
@@ -655,6 +743,38 @@ public class TileSeeker : MonoBehaviour
             {
                 blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y - 0.5f)));
             }
+            else if (leftMap == Map.InnerWall && downMap == Map.Seen)
+            {
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y - 0.5f)));
+            }
+            else if (rightMap == Map.InnerWall && downMap == Map.Seen)
+            {
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y - 0.5f)));
+            }
+            else if (leftMap == Map.InnerWall && topMap == Map.Seen)
+            {
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y + 0.5f)));
+            }
+            else if (rightMap == Map.InnerWall && topMap == Map.Seen)
+            {
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y + 0.5f)));
+            }
+            else if (topMap == Map.InnerWall && rightMap == Map.Seen)
+            {
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y + 0.5f)));
+            }
+            else if (topMap == Map.InnerWall && leftMap == Map.Seen)
+            {
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y + 0.5f)));
+            }
+            else if (downMap == Map.InnerWall && rightMap == Map.Seen)
+            {
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y - 0.5f)));
+            }
+            else if (downMap == Map.InnerWall && leftMap == Map.Seen)
+            {
+                blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y - 0.5f)));
+            }
 
         }
 
@@ -723,24 +843,36 @@ public class TileSeeker : MonoBehaviour
 
     private void scanWallStart()
     {
-        int playerMask = ~(1 << 8);
+        if (this.wallPoints.Count == 0)
+        {
+            this.currMode = Mode.EnvLearn;
+            return;
+        }
+        Vector3 wallPoint = this.wallPoints.Pop();
+        while (this.isOnSeenWall(wallPoint))
+        {
+            if (this.wallPoints.Count == 0)
+            {
+                this.currMode = Mode.EnvLearn;
+                return;
+            }
+            wallPoint = this.wallPoints.Pop();
+        }
 
-        float xDir = (float)Math.Cos(this.lookingDirection * Mathf.Deg2Rad);
-        float yDir = (float)Math.Sin(this.lookingDirection * Mathf.Deg2Rad);
-        Vector3 dir = new Vector3(xDir, yDir, 0);
-        RaycastHit2D hit = Physics2D.Raycast(this.transform.position, dir, Mathf.Infinity, playerMask);
+        // rotate to face the initial position of scanning the wall
+        float angle = Vector2.SignedAngle(wallPoint - this.transform.position, this.myDirectionVector());
+        this.lookingDirection -= angle;
+        this.transform.Rotate(new Vector3(0, 0, -angle));
+
+        Vector3 dir = this.myDirectionVector();
+        RaycastHit2D hit = this.raycast(dir);
         this.originalPoint = hit.point;
 
-        float xDirLeft = (float)Math.Cos((this.lookingDirection + CORNERUPDATENEGATIVE) * Mathf.Deg2Rad);
-        float yDirLeft = (float)Math.Sin((this.lookingDirection + CORNERUPDATENEGATIVE) * Mathf.Deg2Rad);
-        Vector3 left = new Vector3(xDirLeft, yDirLeft, 0);
+        Vector3 left = this.myDirectionVector(CORNERUPDATENEGATIVE);
+        Vector3 right = this.myDirectionVector(CORNERUPDATEPOSITIVE);
 
-        float xDirRight = (float)Math.Cos((this.lookingDirection + CORNERUPDATEPOSITIVE) * Mathf.Deg2Rad);
-        float yDirRight = (float)Math.Sin((this.lookingDirection + CORNERUPDATEPOSITIVE) * Mathf.Deg2Rad);
-        Vector3 right = new Vector3(xDirRight, yDirRight, 0);
-
-        RaycastHit2D leftHit = Physics2D.Raycast(this.transform.position, left, Mathf.Infinity, playerMask);
-        RaycastHit2D rightHit = Physics2D.Raycast(this.transform.position, right, Mathf.Infinity, playerMask);
+        RaycastHit2D leftHit = this.raycast(left);
+        RaycastHit2D rightHit = this.raycast(right);
 
         string tagLeft = leftHit.collider.tag;
         string tagRight = rightHit.collider.tag;
@@ -765,6 +897,7 @@ public class TileSeeker : MonoBehaviour
         else
         {
             choice = leftHit;
+            Debug.Log("Got an invalid state when about to scan a wall ...");
             Debug.Break();
             Application.Quit();
         }
@@ -784,7 +917,7 @@ public class TileSeeker : MonoBehaviour
         this.horizontalWall = Mathf.Abs(this.originalPoint.y - choice.point.y) < Mathf.Pow(10, -3);
         // Debug.Log($"Horizontal Wall? {horizontalWall}");
 
-        this.setCorner = false;
+        this.currMode = Mode.ScanWall;
     }
 
     private bool leftWall(Vector2 point)
@@ -801,18 +934,13 @@ public class TileSeeker : MonoBehaviour
 
     private void scanWall()
     {
-        int playerMask = ~(1 << 8);
-
         this.lookingDirection += this.cornerUpdate;
 
         this.transform.Rotate(new Vector3(0, 0, this.cornerUpdate));
 
-        float xDir = (float)Math.Cos(this.lookingDirection * Mathf.Deg2Rad);
-        float yDir = (float)Math.Sin(this.lookingDirection * Mathf.Deg2Rad);
+        Vector3 dir = this.myDirectionVector();
 
-        Vector3 dir = new Vector3(xDir, yDir, 0);
-
-        RaycastHit2D hit = Physics2D.Raycast(this.transform.position, dir, Mathf.Infinity, playerMask);
+        RaycastHit2D hit = this.raycast(dir);
         this.markEdges(this.transform.position, hit.point, dir);
 
         this.lastCornerSearch = this.currCornerSearch;
@@ -823,7 +951,7 @@ public class TileSeeker : MonoBehaviour
 
         if (hit.collider.tag.Equals("Hider"))
         {
-            float rotationAmount = Vector2.SignedAngle(hit.collider.transform.position - this.transform.position, new Vector2((float)Math.Cos(this.lookingDirection * Mathf.Deg2Rad), (float)Math.Sin(this.lookingDirection * Mathf.Deg2Rad)));
+            float rotationAmount = Vector2.SignedAngle(hit.collider.transform.position - this.transform.position, this.myDirectionVector());
             this.lookingDirection -= rotationAmount;
             this.transform.Rotate(new Vector3(0, 0, -rotationAmount));
 
@@ -842,14 +970,11 @@ public class TileSeeker : MonoBehaviour
 
             // Debug.Log($"Contains coordinates {coordinates}? {this.cornersSeen.Contains(coordinates)}");
 
-            if (!this.cornersSeen.Contains(coordinates) && this.isOnInnerWall(coordinates) && !this.isOnSeenWall(coordinates))
+            if (!this.cornersSeen.Contains(coordinates) && !this.isOnSeenWall(coordinates))
             {
-                if (!this.setCorner)
-                {
-                    this.cornerLocation = coordinates;
-                    this.setCorner = true;
-                }
-                this.cornersSeen.Add(coordinates);
+                this.currCorners.Push(coordinates);
+
+                this.foundCorner = true;
 
                 float rotationAmount = (float)(this.originalDirectionBeforeWallScan - this.lookingDirection);
                 this.lookingDirection = this.originalDirectionBeforeWallScan;
@@ -868,7 +993,7 @@ public class TileSeeker : MonoBehaviour
                     this.lookingDirection = this.originalDirectionBeforeWallScan;
                     this.transform.Rotate(new Vector3(0, 0, rotationAmount));
 
-                    this.currMode = Mode.Scan;
+                    this.currMode = Mode.ReadyToScan;
                 }
                 else
                 {
@@ -892,43 +1017,39 @@ public class TileSeeker : MonoBehaviour
             }
             else
             {
-                // Debug.Log($"Wall: ({this.otherCorner}, {coordinates})");
-                this.addWall((this.otherCorner, coordinates));
-                // Debug.Log("Walls:");
-                // foreach ((Vector2, Vector2) wall in this.walls)
-                // {
-                //     Debug.Log(wall);
-                // }
+                Debug.Log($"Wall: ({this.otherCorner}, {coordinates})");
+                Wall newWall = new Wall(this.otherCorner, coordinates, false);
+                this.addWall(newWall, (newWall.horizontal) ? this.horizontalWalls : this.verticalWalls);
                 this.otherCorner = 200 * Vector2.one;
 
                 float rotationAmount = (float)(this.originalDirectionBeforeWallScan - this.lookingDirection);
                 this.lookingDirection = this.originalDirectionBeforeWallScan;
                 this.transform.Rotate(new Vector3(0, 0, rotationAmount));
 
-                this.currMode = Mode.FindCorner;
+                this.currMode = Mode.ScanWallStart;
                 return;
             }
         }
     }
 
-    private void addWall((Vector2, Vector2) newWall)
+    private void addWall(Wall newWall, List<Wall> list)
     {
-        for (int i = this.walls.Count - 1; i >= 0; i--)
+        for (int i = list.Count - 1; i >= 0; i--)
         {
-            if (this.wallIntersect(newWall, this.walls[i]))
+            if (this.wallIntersect(newWall, list[i]))
             {
-                (Vector2, Vector2) currWall = this.walls[i];
-                this.walls[i] = this.mergeWalls(currWall, newWall);
+                Wall currWall = list[i];
+                list[i] = this.mergeWalls(currWall, newWall);
                 return;
             }
         }
-        this.walls.Add(newWall);
+        list.Add(newWall);
     }
 
-    private bool wallIntersect((Vector2, Vector2) wallOne, (Vector2, Vector2) wallTwo)
+    private bool wallIntersect(Wall wallOne, Wall wallTwo)
     {
-        bool wallOneHorizontal = Mathf.Abs(wallOne.Item1.y - wallOne.Item2.y) < Mathf.Pow(10, -3);
-        bool wallTwoHorizontal = Mathf.Abs(wallTwo.Item1.y - wallTwo.Item2.y) < Mathf.Pow(10, -3);
+        bool wallOneHorizontal = wallOne.horizontal;
+        bool wallTwoHorizontal = wallTwo.horizontal;
         if (wallOneHorizontal != wallTwoHorizontal)
         {
             return false;
@@ -936,61 +1057,388 @@ public class TileSeeker : MonoBehaviour
 
         if (wallOneHorizontal)
         {
-            if (Mathf.Abs(wallOne.Item1.y - wallTwo.Item1.y) >= Mathf.Pow(10, -3))
+            if (Mathf.Abs(wallOne.yMax - wallTwo.yMax) >= Mathf.Pow(10, -3))
             {
                 return false;
             }
-            float minXOne = Mathf.Min(wallOne.Item1.x, wallOne.Item2.x);
-            float maxXOne = Mathf.Max(wallOne.Item1.x, wallOne.Item2.x);
+            float minXOne = wallOne.xMin;
+            float maxXOne = wallOne.xMax;
 
-            float minXTwo = Mathf.Min(wallTwo.Item1.x, wallTwo.Item2.x);
-            float maxXTwo = Mathf.Max(wallTwo.Item1.x, wallTwo.Item2.x);
+            float minXTwo = wallTwo.xMin;
+            float maxXTwo = wallTwo.xMax;
             return (!(minXTwo > maxXOne || minXOne > maxXTwo));
         }
         else
         {
-            if (Mathf.Abs(wallOne.Item1.x - wallTwo.Item1.x) >= Mathf.Pow(10, -3))
+            if (Mathf.Abs(wallOne.xMin - wallTwo.xMin) >= Mathf.Pow(10, -3))
             {
                 return false;
             }
-            float minYOne = Mathf.Min(wallOne.Item1.y, wallOne.Item2.y);
-            float maxYOne = Mathf.Max(wallOne.Item1.y, wallOne.Item2.y);
+            float minYOne = wallOne.yMin;
+            float maxYOne = wallOne.yMax;
 
-            float minYTwo = Mathf.Min(wallTwo.Item1.y, wallTwo.Item2.y);
-            float maxYTwo = Mathf.Max(wallTwo.Item1.y, wallTwo.Item2.y);
+            float minYTwo = wallTwo.yMin;
+            float maxYTwo = wallTwo.yMax;
 
             return (!(minYTwo > maxYOne || minYOne > maxYTwo));
         }
     }
 
-    private (Vector2, Vector2) mergeWalls((Vector2, Vector2) wallOne, (Vector2, Vector2) wallTwo)
+
+    private void mergeWalls(List<Wall> walls, bool horizontal)
     {
-        // we assume that the walls are aligned correctly
-        bool horizontal = Mathf.Abs(wallOne.Item1.y - wallOne.Item2.y) < Mathf.Pow(10, -3);
+        List<Wall> newWalls = new List<Wall>();
+        foreach (var item in walls)
+        {
+            newWalls.Add(item);
+        }
+
+        bool hasChanged = true;
+
+        do
+        {
+            hasChanged = false;
+            List<Wall> currWalls = new List<Wall>();
+            HashSet<int> added = new HashSet<int>();
+            for (int i = 0; i < newWalls.Count; i++)
+            {
+                bool didMerge = false;
+                for (int j = i + 1; j < newWalls.Count; j++)
+                {
+                    if (added.Contains(i) || added.Contains(j))
+                    {
+                        continue;
+                    }
+                    if (this.wallIntersect(newWalls[i], newWalls[j]))
+                    {
+                        // Debug.Log($"Merge! {newWalls[i]} + {newWalls[j]}");
+                        currWalls.Add(this.mergeWalls(newWalls[i], newWalls[j]));
+                        hasChanged = true;
+                        didMerge = true;
+                        break;
+                    }
+                }
+                if (!didMerge)
+                {
+                    currWalls.Add(newWalls[i]);
+                }
+            }
+            newWalls = currWalls;
+        } while (hasChanged);
+
         if (horizontal)
         {
-            float[] x = new float[] { wallOne.Item1.x, wallOne.Item2.x, wallTwo.Item1.x, wallTwo.Item2.x };
+            this.horizontalWalls = newWalls;
+        }
+        else
+        {
+            this.verticalWalls = newWalls;
+        }
+    }
+
+    private void mergeWalls()
+    {
+        this.mergeWalls(this.horizontalWalls, true);
+        this.mergeWalls(this.verticalWalls, false);
+    }
+
+    private Wall mergeWalls(Wall wallOne, Wall wallTwo)
+    {
+        // we assume that the walls are aligned correctly
+        bool horizontal = wallOne.horizontal;
+        if (horizontal)
+        {
+            float[] x = new float[] { wallOne.xMin, wallOne.xMax, wallTwo.xMin, wallTwo.xMax };
 
             float minX = x.Min();
             float maxX = x.Max();
 
-            float y = Mathf.Round(wallOne.Item1.y);
+            float y = Mathf.Round(wallOne.yMax);
             Vector2 one = new Vector2(minX, y);
             Vector2 two = new Vector2(maxX, y);
-            return (one, two);
+            return new Wall(one, two, false);
         }
         else
         {
-            float[] y = new float[] { wallOne.Item1.y, wallOne.Item2.y, wallTwo.Item1.y, wallTwo.Item2.y };
+            float[] y = new float[] { wallOne.yMin, wallOne.yMax, wallTwo.yMin, wallTwo.yMax };
 
             float minY = y.Min();
             float maxY = y.Max();
 
-            float x = Mathf.Round(wallOne.Item1.x);
+            float x = Mathf.Round(wallOne.xMin);
             Vector2 one = new Vector2(x, minY);
             Vector2 two = new Vector2(x, maxY);
-            return (one, two);
+            return new Wall(one, two, false);
         }
+    }
+
+    private bool makeRooms()
+    {
+        bool res = false;
+
+        float epsilon = Mathf.Pow(10, -3);
+        for (int wallOneIdx = this.horizontalWalls.Count - 1; wallOneIdx >= 0; wallOneIdx--)
+        {
+            Wall wallOne = this.horizontalWalls[wallOneIdx];
+            float yOne = wallOne.yMin;
+            for (int wallTwoIdx = this.verticalWalls.Count - 1; wallTwoIdx >= 0; wallTwoIdx--)
+            {
+                Wall wallTwo = this.verticalWalls[wallTwoIdx];
+                float xTwo = wallTwo.xMin;
+                if (wallTwo.yMin - epsilon <= yOne && yOne <= wallTwo.yMax + epsilon)
+                {
+                    // Debug.Log($"{wallOne} <-> {wallTwo}");
+                    for (int wallThreeIdx = this.horizontalWalls.Count - 1; wallThreeIdx >= 0; wallThreeIdx--)
+                    {
+                        if (wallThreeIdx == wallOneIdx)
+                        {
+                            continue;
+                        }
+                        Wall wallThree = this.horizontalWalls[wallThreeIdx];
+                        float yThree = wallThree.yMin;
+                        // Debug.Log()
+                        if (wallThree.xMin - epsilon <= xTwo && xTwo <= wallThree.xMax + epsilon)
+                        {
+                            // Debug.Log($"({wallOne}) <-> ({wallTwo}) <-> ({wallThree}");
+                            for (int wallFourIdx = this.verticalWalls.Count - 1; wallFourIdx >= 0; wallFourIdx--)
+                            {
+                                if (wallFourIdx == wallTwoIdx)
+                                {
+                                    continue;
+                                }
+                                Wall wallFour = this.verticalWalls[wallFourIdx];
+                                if (wallFour.yMin - epsilon <= yThree && yThree <= wallFour.yMax + epsilon)
+                                {
+                                    float[] xVerts = new float[] { wallTwo.xMin, wallFour.xMin };
+                                    float[] yVerts = new float[] { wallOne.yMin, wallThree.yMin };
+
+                                    bool wallOneSep = !(wallOne.xMin - epsilon <= xVerts.Min() && wallOne.xMax + epsilon >= xVerts.Max());
+                                    bool wallThreeSep = !(wallThree.xMin - epsilon <= xVerts.Min() && wallThree.xMax + epsilon >= xVerts.Max());
+
+
+                                    bool wallTwoSep = !(wallTwo.yMin - epsilon <= yVerts.Min() && wallTwo.yMax + epsilon >= yVerts.Max());
+                                    bool wallFourSep = !(wallFour.yMin - epsilon <= yVerts.Min() && wallFour.yMax + epsilon >= yVerts.Max());
+
+                                    int countSep = (new bool[] { wallOneSep, wallTwoSep, wallThreeSep, wallFourSep }).Count(t => t);
+                                    if (countSep == 1)
+                                    {
+                                        bool oneMisaligned = wallOne.xMax <= xVerts.Min() || wallOne.xMin >= xVerts.Max();
+                                        bool twoMisaligned = wallTwo.yMax <= yVerts.Min() || wallTwo.yMin >= yVerts.Max();
+                                        bool threeMisaligned = wallThree.xMax <= xVerts.Min() || wallThree.xMin >= xVerts.Max();
+                                        bool fourMisaligned = wallFour.yMax <= yVerts.Min() || wallFour.yMin >= yVerts.Max();
+                                        if (oneMisaligned || twoMisaligned || threeMisaligned || fourMisaligned)
+                                        {
+                                            continue;
+                                        }
+                                        int numOuter = (new bool[] { wallOne.permanent, wallTwo.permanent, wallThree.permanent, wallFour.permanent }).Count(t => t);
+                                        if (numOuter >= 3)
+                                        {
+                                            continue;
+                                        }
+                                        Room roomCandidate = new Room(wallOne, wallTwo, wallThree, wallFour);
+                                        bool isCleared = this.setRoomCleared(roomCandidate);
+
+                                        if (isCleared)
+                                        {
+                                            this.setRoomEntrance(roomCandidate);
+
+                                            if (roomCandidate.blocksEntrance.Count != 0)
+                                            {
+                                                this.rooms.Add(roomCandidate);
+
+                                                if (!wallOne.permanent)
+                                                {
+                                                    this.horizontalWalls.RemoveAt(wallOneIdx);
+                                                }
+
+                                                if (!wallTwo.permanent)
+                                                {
+                                                    this.verticalWalls.RemoveAt(wallTwoIdx);
+                                                }
+
+                                                if (!wallThree.permanent)
+                                                {
+                                                    this.horizontalWalls.RemoveAt(wallThreeIdx);
+                                                }
+
+                                                if (!wallFour.permanent)
+                                                {
+                                                    this.verticalWalls.RemoveAt(wallFourIdx);
+                                                }
+                                                res = true;
+                                                Debug.Log("Adding a room!");
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return res;
+    }
+
+    private void setRoomEntrance(Room room)
+    {
+        foreach (int block in this.blocksAdjacentToRoom(room))
+        {
+            room.blocksEntrance.Add(block);
+        }
+    }
+
+    private IEnumerable<int> blocksAdjacentToRoom(Room room)
+    {
+        float epsilon = Mathf.Pow(10, -3);
+        float topPoint = originPoint.y;
+        float leftPoint = -originPoint.x;
+        float rightPoint = this.cols - originPoint.x;
+        float bottomPoint = this.originPoint.y - this.rows;
+
+        Vector2 nw = room.NWCorner;
+        Vector2 ne = room.NECorner;
+        Vector2 sw = room.SWCorner;
+        Vector2 se = room.SECorner;
+
+        float xStart, xEnd, yStart, yEnd, xFixed, yFixed;
+
+        xStart = Mathf.Round(nw.x) - 0.5f;
+        xEnd = Mathf.Round(ne.x) + 0.5f;
+        yFixed = Mathf.Round(ne.y) + 0.5f;
+        // top row
+        // if (yFixed > topPoint || yFixed)
+        if (!(yFixed > topPoint || yFixed < bottomPoint))
+        {
+            for (float x = xStart; x <= xEnd + epsilon; x += 1f)
+            {
+                if (x < leftPoint || x > rightPoint)
+                {
+                    continue;
+                }
+                int currBlock = this.mapCoordinatesToBlock(new Vector2(x, yFixed));
+                if (!this.removedBlocks.Contains(currBlock))
+                {
+                    yield return currBlock;
+                }
+            }
+        }
+
+        // left column
+        yStart = Mathf.Round(nw.y) + 0.5f;
+        yEnd = Mathf.Round(sw.y) - 0.5f;
+        xFixed = Mathf.Round(nw.x) - 0.5f;
+        if (!(xFixed < leftPoint || xFixed > rightPoint))
+        {
+            for (float y = yStart; y >= yEnd - epsilon; y -= 1f)
+            {
+                if (y < bottomPoint || y > topPoint)
+                {
+                    continue;
+                }
+                int currBlock = this.mapCoordinatesToBlock(new Vector2(xFixed, y));
+                if (!this.removedBlocks.Contains(currBlock))
+                {
+                    yield return currBlock;
+                }
+            }
+        }
+
+        // right column
+        yStart = Mathf.Round(ne.y) + 0.5f;
+        yEnd = Mathf.Round(se.y) - 0.5f;
+        xFixed = Mathf.Round(ne.x) + 0.5f;
+        if (!(xFixed < leftPoint || xFixed > rightPoint))
+        {
+            for (float y = yStart; y >= yEnd - epsilon; y -= 1f)
+            {
+                if (y < bottomPoint || y > topPoint)
+                {
+                    continue;
+                }
+                int currBlock = this.mapCoordinatesToBlock(new Vector2(xFixed, y));
+                if (!this.removedBlocks.Contains(currBlock))
+                {
+                    yield return currBlock;
+                }
+            }
+        }
+
+        // bottom row
+        xStart = Mathf.Round(sw.x) - 0.5f;
+        xEnd = Mathf.Round(se.x) + 0.5f;
+        yFixed = Mathf.Round(se.y) - 0.5f;
+        if (!(yFixed > topPoint || yFixed < bottomPoint))
+        {
+            for (float x = xStart; x <= xEnd + epsilon; x += 1f)
+            {
+                if (x < leftPoint || x > rightPoint)
+                {
+                    continue;
+                }
+                int currBlock = this.mapCoordinatesToBlock(new Vector2(x, yFixed));
+                if (!this.removedBlocks.Contains(currBlock))
+                {
+                    yield return currBlock;
+                }
+            }
+        }
+    }
+
+    private IEnumerable<int> blocksInRange(float xStart, float xEnd, float yStart, float yEnd)
+    {
+        float epsilon = Mathf.Pow(10, -3);
+        for (float x = xStart; x <= xEnd + epsilon; x += 1f)
+        {
+            for (float y = yStart; y >= yEnd - epsilon; y -= 1f)
+            {
+                yield return this.mapCoordinatesToBlock(new Vector2(x, y));
+            }
+        }
+    }
+
+    private bool setRoomCleared(Room room)
+    {
+        foreach (int block in this.blocksInRoom(room))
+        {
+            int numUnknown = this.edgesForBlock(block).Count(t => this.edges[Mathf.RoundToInt(t.x), Mathf.RoundToInt(t.y)] == Map.Unknown);
+            if (numUnknown > 0)
+            {
+                // Debug.Log($"Unknown: {block}");
+                room.cleared = false;
+                return false;
+            }
+        }
+        room.cleared = true;
+        return true;
+    }
+
+    private IEnumerable<int> blocksInRoom(Room room)
+    {
+        float epsilon = Mathf.Pow(10, -3);
+        Vector2 nw = room.NWCorner;
+        float xMax = room.NECorner.x + epsilon;
+        float yMin = room.SECorner.y - epsilon;
+
+        float xStart = Mathf.Round(nw.x) + 0.5f;
+        float yStart = Mathf.Round(nw.y) - 0.5f;
+
+        for (float x = xStart; x <= xMax; x += 1f)
+        {
+            for (float y = yStart; y >= yMin; y -= 1f)
+            {
+                yield return this.mapCoordinatesToBlock(new Vector2(x, y));
+            }
+        }
+    }
+
+    private IEnumerable<Vector2> edgesForBlock(int block)
+    {
+        Vector2 coords = this.mapBlockToCoordinates(block);
+        yield return this.mapPointToEdge(new Vector2(coords.x + 0.5f, coords.y));
+        yield return this.mapPointToEdge(new Vector2(coords.x, coords.y + 0.5f));
+        yield return this.mapPointToEdge(new Vector2(coords.x, coords.y - 0.5f));
+        yield return this.mapPointToEdge(new Vector2(coords.x - 0.5f, coords.y));
     }
 
     private bool isOnLine(Vector2 point)
@@ -1079,9 +1527,9 @@ public class TileSeeker : MonoBehaviour
             Vector2 location = this.mapBlockToCoordinates(nextBlock);
             if (this.removedBlocks.Contains(nextBlock))
             {
-                Debug.Log("Editing path ...");
+                // Debug.Log("Editing path ...");
                 this.removeBlockFromGraph(nextBlock);
-                this.currMode = Mode.FindCorner;
+                this.generatePath(this.mapCoordinatesToBlock(this.transform.position), this.goalBlock);
                 return;
             }
 
