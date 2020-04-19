@@ -18,6 +18,6 @@ public class Hider : MonoBehaviour
 
     void OnCollisionEnter2D(Collision2D col)
     {
-        Debug.Break();
+        // Debug.Break();
     }
 }

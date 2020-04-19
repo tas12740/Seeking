@@ -97,12 +97,13 @@ public class DFSGraphSeeker : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        this.timer += Time.deltaTime;
-        if (this.timer > this.timeStep)
-        {
-            doUpdate();
-            this.timer = 0f;
-        }
+        doUpdate();
+        // this.timer += Time.deltaTime;
+        // if (this.timer > this.timeStep)
+        // {
+        //     doUpdate();
+        //     this.timer = 0f;
+        // }
     }
 
     private void doUpdate()

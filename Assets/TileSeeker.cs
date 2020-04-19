@@ -29,7 +29,8 @@ public class TileSeeker : MonoBehaviour
         ScanWallStart,
         ScanWall,
         MoveToCorner,
-        FindCorner
+        FindCorner,
+        FoundHider
     }
     private Mode currMode;
 
@@ -76,6 +77,7 @@ public class TileSeeker : MonoBehaviour
     private Stack<int> path = new Stack<int>();
     private int goalBlock = -1;
     private Collider2D innerWallCollider;
+    private Collider2D hiderCollider;
 
     private double lookingDirection = 0;
     private float currRotation = 0;
@@ -102,6 +104,7 @@ public class TileSeeker : MonoBehaviour
         line.material.color = Color.black;
 
         this.innerWallCollider = GameObject.FindGameObjectsWithTag("Inner")[0].GetComponent<Collider2D>() as Collider2D;
+        this.hiderCollider = GameObject.FindGameObjectsWithTag("Hider")[0].GetComponent<Collider2D>() as Collider2D;
 
         int finalVertex = (this.rows + 1) * (this.cols + 1);
         // Debug.Log($"Final vertex: {finalVertex}");
@@ -220,33 +223,39 @@ public class TileSeeker : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        this.locationMap[this.mapCoordinatesToBlock(new Vector2(this.transform.position.x, this.transform.position.y))] = true;
+        if (this.isPointWithinHiderCollider(this.transform.position))
+        {
+            this.currMode = Mode.FoundHider;
+            return;
+        }
+        this.locationMap[this.mapCoordinatesToBlock(this.transform.position)] = true;
         float xDir = (float)Math.Cos(this.lookingDirection * Math.PI / 180);
         float yDir = (float)Math.Sin(this.lookingDirection * Math.PI / 180);
 
         Vector3 dir = new Vector3(xDir, yDir, 0);
         Ray ray = new Ray(this.transform.position, dir);
 
-        line.SetPosition(0, ray.origin);
-        line.SetPosition(1, ray.origin + ray.direction);
+        // line.SetPosition(0, ray.origin);
+        // line.SetPosition(1, ray.origin + ray.direction);
 
-        this.timer += Time.deltaTime;
-        if (this.currMode == Mode.ScanWall)
-        {
-            if (this.timer > this.timeStepScanWall)
-            {
-                doUpdate();
-                this.timer = 0;
-            }
-        }
-        else
-        {
-            if (this.timer > this.timeStep)
-            {
-                doUpdate();
-                this.timer = 0;
-            }
-        }
+        doUpdate();
+        // this.timer += Time.deltaTime;
+        // if (this.currMode == Mode.ScanWall)
+        // {
+        //     if (this.timer > this.timeStepScanWall)
+        //     {
+        //         doUpdate();
+        //         this.timer = 0;
+        //     }
+        // }
+        // else
+        // {
+        //     if (this.timer > this.timeStep)
+        //     {
+        //         doUpdate();
+        //         this.timer = 0;
+        //     }
+        // }
     }
 
     private void doUpdate()
@@ -318,6 +327,20 @@ public class TileSeeker : MonoBehaviour
                 this.currMode = Mode.FindCorner;
             }
         }
+        else if (this.currMode == Mode.FoundHider)
+        {
+            // filler
+        }
+    }
+
+    private bool isPointWithinHiderCollider(Vector2 point)
+    {
+        return this.isPointWithinCollider(this.hiderCollider, point);
+    }
+
+    private bool isPointWithinCollider(Collider2D collider, Vector2 point)
+    {
+        return (collider.ClosestPoint(point) - point).sqrMagnitude < Mathf.Epsilon * Mathf.Epsilon;
     }
 
     private RaycastHit2D raycast(Vector2 direction, float limit = Mathf.Infinity)
@@ -2254,7 +2277,7 @@ public class TileSeeker : MonoBehaviour
         {
             return;
         }
-        Debug.DrawLine(start, end, color, 1000f);
+        // Debug.DrawLine(start, end, color, 1000f);
     }
 
     private Vector2 mapBlockToCoordinates(int blockNumber)
