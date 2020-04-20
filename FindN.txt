@@ -1,0 +1,510 @@
+Experiment 1:
+
+Number: 5
+Mean of BFS: 1059.80 	 Standard Deviation of BFS: 25.34
+Mean of DFS: 687.40 	 Standard Deviation of DFS: 153.73
+Mean of Tile: 8652.80 	 Standard Deviation of Tile: 2959.51
+
+Number: 10
+Mean of BFS: 1046.00 	 Standard Deviation of BFS: 34.61
+Mean of DFS: 521.20 	 Standard Deviation of DFS: 216.89
+Mean of Tile: 9086.10 	 Standard Deviation of Tile: 2546.63
+
+Number: 15
+Mean of BFS: 1046.60 	 Standard Deviation of BFS: 38.12
+Mean of DFS: 562.13 	 Standard Deviation of DFS: 198.88
+Mean of Tile: 9149.80 	 Standard Deviation of Tile: 2648.61
+
+Number: 20
+Mean of BFS: 1080.60 	 Standard Deviation of BFS: 83.46
+Mean of DFS: 571.65 	 Standard Deviation of DFS: 181.77
+Mean of Tile: 9073.80 	 Standard Deviation of Tile: 2646.72
+
+Number: 25
+Mean of BFS: 1073.92 	 Standard Deviation of BFS: 76.99
+Mean of DFS: 576.20 	 Standard Deviation of DFS: 184.35
+Mean of Tile: 9160.24 	 Standard Deviation of Tile: 2513.19
+
+Number: 30
+Mean of BFS: 1075.93 	 Standard Deviation of BFS: 72.14
+Mean of DFS: 587.63 	 Standard Deviation of DFS: 187.72
+Mean of Tile: 9076.17 	 Standard Deviation of Tile: 2429.39
+
+Number: 35
+Mean of BFS: 1080.97 	 Standard Deviation of BFS: 71.62
+Mean of DFS: 604.66 	 Standard Deviation of DFS: 189.96
+Mean of Tile: 9007.26 	 Standard Deviation of Tile: 2479.79
+
+Number: 40
+Mean of BFS: 1098.80 	 Standard Deviation of BFS: 89.92
+Mean of DFS: 617.85 	 Standard Deviation of DFS: 187.34
+Mean of Tile: 8900.58 	 Standard Deviation of Tile: 2443.46
+
+Number: 45
+Mean of BFS: 1118.84 	 Standard Deviation of BFS: 102.79
+Mean of DFS: 622.20 	 Standard Deviation of DFS: 178.63
+Mean of Tile: 9205.76 	 Standard Deviation of Tile: 2502.73
+
+Number: 50
+Mean of BFS: 1122.70 	 Standard Deviation of BFS: 105.87
+Mean of DFS: 620.70 	 Standard Deviation of DFS: 175.86
+Mean of Tile: 9078.08 	 Standard Deviation of Tile: 2508.69
+
+Number: 55
+Mean of BFS: 1113.38 	 Standard Deviation of BFS: 105.83
+Mean of DFS: 628.55 	 Standard Deviation of DFS: 177.29
+Mean of Tile: 9235.84 	 Standard Deviation of Tile: 2769.64
+
+Number: 60
+Mean of BFS: 1110.15 	 Standard Deviation of BFS: 102.30
+Mean of DFS: 630.12 	 Standard Deviation of DFS: 173.89
+Mean of Tile: 9407.33 	 Standard Deviation of Tile: 2827.53
+
+Number: 65
+Mean of BFS: 1104.78 	 Standard Deviation of BFS: 100.54
+Mean of DFS: 626.06 	 Standard Deviation of DFS: 177.84
+Mean of Tile: 9448.66 	 Standard Deviation of Tile: 2788.23
+
+Number: 70
+Mean of BFS: 1102.74 	 Standard Deviation of BFS: 97.47
+Mean of DFS: 623.04 	 Standard Deviation of DFS: 177.29
+Mean of Tile: 9637.87 	 Standard Deviation of Tile: 2867.71
+
+Number: 75
+Mean of BFS: 1099.69 	 Standard Deviation of BFS: 96.96
+Mean of DFS: 629.03 	 Standard Deviation of DFS: 174.49
+Mean of Tile: 9468.45 	 Standard Deviation of Tile: 2901.21
+
+Number: 80
+Mean of BFS: 1106.38 	 Standard Deviation of BFS: 100.85
+Mean of DFS: 616.66 	 Standard Deviation of DFS: 177.43
+Mean of Tile: 9533.19 	 Standard Deviation of Tile: 2857.52
+
+Number: 85
+Mean of BFS: 1102.93 	 Standard Deviation of BFS: 99.25
+Mean of DFS: 614.04 	 Standard Deviation of DFS: 177.70
+Mean of Tile: 9548.27 	 Standard Deviation of Tile: 2828.40
+
+Number: 90
+Mean of BFS: 1104.64 	 Standard Deviation of BFS: 99.09
+Mean of DFS: 608.49 	 Standard Deviation of DFS: 177.60
+Mean of Tile: 9398.86 	 Standard Deviation of Tile: 2852.30
+
+Number: 95
+Mean of BFS: 1100.92 	 Standard Deviation of BFS: 98.39
+Mean of DFS: 606.93 	 Standard Deviation of DFS: 180.88
+Mean of Tile: 9378.58 	 Standard Deviation of Tile: 2818.63
+
+Number: 100
+Mean of BFS: 1099.04 	 Standard Deviation of BFS: 96.85
+Mean of DFS: 601.41 	 Standard Deviation of DFS: 181.58
+Mean of Tile: 9309.15 	 Standard Deviation of Tile: 2821.36
+
+Experiment 2:
+
+Number: 5
+Mean of BFS: 935.80 	 Standard Deviation of BFS: 42.58
+Mean of DFS: 450.40 	 Standard Deviation of DFS: 242.67
+Mean of Tile: 4877.40 	 Standard Deviation of Tile: 619.55
+
+Number: 10
+Mean of BFS: 945.70 	 Standard Deviation of BFS: 67.61
+Mean of DFS: 597.10 	 Standard Deviation of DFS: 247.82
+Mean of Tile: 5641.40 	 Standard Deviation of Tile: 1987.30
+
+Number: 15
+Mean of BFS: 939.60 	 Standard Deviation of BFS: 61.49
+Mean of DFS: 597.53 	 Standard Deviation of DFS: 238.85
+Mean of Tile: 5656.00 	 Standard Deviation of Tile: 2078.05
+
+Number: 20
+Mean of BFS: 935.55 	 Standard Deviation of BFS: 62.40
+Mean of DFS: 563.95 	 Standard Deviation of DFS: 225.79
+Mean of Tile: 5520.65 	 Standard Deviation of Tile: 1947.55
+
+Number: 25
+Mean of BFS: 931.60 	 Standard Deviation of BFS: 62.24
+Mean of DFS: 512.72 	 Standard Deviation of DFS: 231.62
+Mean of Tile: 5441.00 	 Standard Deviation of Tile: 1929.50
+
+Number: 30
+Mean of BFS: 933.17 	 Standard Deviation of BFS: 64.71
+Mean of DFS: 559.80 	 Standard Deviation of DFS: 322.47
+Mean of Tile: 5320.93 	 Standard Deviation of Tile: 1794.55
+
+Number: 35
+Mean of BFS: 936.14 	 Standard Deviation of BFS: 64.16
+Mean of DFS: 588.29 	 Standard Deviation of DFS: 314.63
+Mean of Tile: 5425.74 	 Standard Deviation of Tile: 1879.27
+
+Number: 40
+Mean of BFS: 957.85 	 Standard Deviation of BFS: 88.08
+Mean of DFS: 592.62 	 Standard Deviation of DFS: 302.99
+Mean of Tile: 5334.23 	 Standard Deviation of Tile: 1787.67
+
+Number: 45
+Mean of BFS: 961.04 	 Standard Deviation of BFS: 86.48
+Mean of DFS: 576.00 	 Standard Deviation of DFS: 301.81
+Mean of Tile: 5336.93 	 Standard Deviation of Tile: 1778.36
+
+Number: 50
+Mean of BFS: 957.98 	 Standard Deviation of BFS: 84.45
+Mean of DFS: 574.88 	 Standard Deviation of DFS: 308.42
+Mean of Tile: 5481.90 	 Standard Deviation of Tile: 1878.20
+
+Number: 55
+Mean of BFS: 959.29 	 Standard Deviation of BFS: 82.03
+Mean of DFS: 576.11 	 Standard Deviation of DFS: 299.92
+Mean of Tile: 5508.53 	 Standard Deviation of Tile: 1801.62
+
+Number: 60
+Mean of BFS: 963.15 	 Standard Deviation of BFS: 80.34
+Mean of DFS: 566.60 	 Standard Deviation of DFS: 300.77
+Mean of Tile: 5649.03 	 Standard Deviation of Tile: 1933.47
+
+Number: 65
+Mean of BFS: 965.43 	 Standard Deviation of BFS: 79.41
+Mean of DFS: 552.35 	 Standard Deviation of DFS: 300.52
+Mean of Tile: 5710.62 	 Standard Deviation of Tile: 1919.61
+
+Number: 70
+Mean of BFS: 964.01 	 Standard Deviation of BFS: 79.40
+Mean of DFS: 562.57 	 Standard Deviation of DFS: 293.33
+Mean of Tile: 5855.81 	 Standard Deviation of Tile: 2110.83
+
+Number: 75
+Mean of BFS: 961.44 	 Standard Deviation of BFS: 78.62
+Mean of DFS: 573.91 	 Standard Deviation of DFS: 289.58
+Mean of Tile: 5900.80 	 Standard Deviation of Tile: 2145.14
+
+Number: 80
+Mean of BFS: 961.16 	 Standard Deviation of BFS: 77.31
+Mean of DFS: 565.17 	 Standard Deviation of DFS: 286.54
+Mean of Tile: 6050.12 	 Standard Deviation of Tile: 2246.12
+
+Number: 85
+Mean of BFS: 961.86 	 Standard Deviation of BFS: 76.70
+Mean of DFS: 574.67 	 Standard Deviation of DFS: 283.46
+Mean of Tile: 5960.74 	 Standard Deviation of Tile: 2211.03
+
+Number: 90
+Mean of BFS: 959.33 	 Standard Deviation of BFS: 76.12
+Mean of DFS: 567.07 	 Standard Deviation of DFS: 282.08
+Mean of Tile: 5924.14 	 Standard Deviation of Tile: 2179.03
+
+Number: 95
+Mean of BFS: 957.02 	 Standard Deviation of BFS: 75.04
+Mean of DFS: 569.75 	 Standard Deviation of DFS: 278.21
+Mean of Tile: 5843.13 	 Standard Deviation of Tile: 2152.21
+
+Number: 100
+Mean of BFS: 954.79 	 Standard Deviation of BFS: 74.63
+Mean of DFS: 575.75 	 Standard Deviation of DFS: 275.14
+Mean of Tile: 5798.37 	 Standard Deviation of Tile: 2158.93
+
+Experiment 3:
+
+Number: 5
+Mean of BFS: 108.80 	 Standard Deviation of BFS: 14.55
+Mean of DFS: 135.40 	 Standard Deviation of DFS: 47.19
+Mean of Tile: 248.40 	 Standard Deviation of Tile: 4.92
+
+Number: 10
+Mean of BFS: 111.10 	 Standard Deviation of BFS: 18.24
+Mean of DFS: 140.80 	 Standard Deviation of DFS: 66.79
+Mean of Tile: 249.20 	 Standard Deviation of Tile: 7.69
+
+Number: 15
+Mean of BFS: 111.40 	 Standard Deviation of BFS: 21.52
+Mean of DFS: 157.07 	 Standard Deviation of DFS: 97.16
+Mean of Tile: 248.40 	 Standard Deviation of Tile: 7.29
+
+Number: 20
+Mean of BFS: 106.20 	 Standard Deviation of BFS: 21.91
+Mean of DFS: 147.00 	 Standard Deviation of DFS: 88.64
+Mean of Tile: 253.15 	 Standard Deviation of Tile: 14.46
+
+Number: 25
+Mean of BFS: 105.12 	 Standard Deviation of BFS: 20.39
+Mean of DFS: 152.00 	 Standard Deviation of DFS: 88.35
+Mean of Tile: 256.80 	 Standard Deviation of Tile: 17.49
+
+Number: 30
+Mean of BFS: 104.57 	 Standard Deviation of BFS: 19.36
+Mean of DFS: 148.33 	 Standard Deviation of DFS: 82.83
+Mean of Tile: 259.10 	 Standard Deviation of Tile: 17.09
+
+Number: 35
+Mean of BFS: 104.43 	 Standard Deviation of BFS: 19.22
+Mean of DFS: 166.14 	 Standard Deviation of DFS: 106.92
+Mean of Tile: 262.26 	 Standard Deviation of Tile: 19.52
+
+Number: 40
+Mean of BFS: 107.05 	 Standard Deviation of BFS: 19.99
+Mean of DFS: 163.75 	 Standard Deviation of DFS: 102.26
+Mean of Tile: 261.23 	 Standard Deviation of Tile: 18.74
+
+Number: 45
+Mean of BFS: 106.29 	 Standard Deviation of BFS: 19.75
+Mean of DFS: 157.38 	 Standard Deviation of DFS: 99.56
+Mean of Tile: 259.89 	 Standard Deviation of Tile: 18.23
+
+Number: 50
+Mean of BFS: 106.22 	 Standard Deviation of BFS: 19.81
+Mean of DFS: 151.62 	 Standard Deviation of DFS: 96.38
+Mean of Tile: 259.10 	 Standard Deviation of Tile: 17.48
+
+Number: 55
+Mean of BFS: 105.09 	 Standard Deviation of BFS: 19.97
+Mean of DFS: 155.60 	 Standard Deviation of DFS: 102.64
+Mean of Tile: 258.00 	 Standard Deviation of Tile: 17.05
+
+Number: 60
+Mean of BFS: 104.87 	 Standard Deviation of BFS: 20.70
+Mean of DFS: 154.97 	 Standard Deviation of DFS: 104.21
+Mean of Tile: 256.88 	 Standard Deviation of Tile: 16.78
+
+Number: 65
+Mean of BFS: 103.45 	 Standard Deviation of BFS: 20.64
+Mean of DFS: 153.49 	 Standard Deviation of DFS: 102.60
+Mean of Tile: 257.91 	 Standard Deviation of Tile: 17.15
+
+Number: 70
+Mean of BFS: 103.59 	 Standard Deviation of BFS: 20.83
+Mean of DFS: 156.97 	 Standard Deviation of DFS: 104.90
+Mean of Tile: 257.17 	 Standard Deviation of Tile: 16.75
+
+Number: 75
+Mean of BFS: 103.40 	 Standard Deviation of BFS: 20.62
+Mean of DFS: 160.44 	 Standard Deviation of DFS: 109.91
+Mean of Tile: 256.53 	 Standard Deviation of Tile: 16.38
+
+Number: 80
+Mean of BFS: 103.33 	 Standard Deviation of BFS: 20.35
+Mean of DFS: 156.66 	 Standard Deviation of DFS: 107.78
+Mean of Tile: 255.85 	 Standard Deviation of Tile: 16.12
+
+Number: 85
+Mean of BFS: 103.46 	 Standard Deviation of BFS: 20.38
+Mean of DFS: 163.95 	 Standard Deviation of DFS: 114.48
+Mean of Tile: 255.35 	 Standard Deviation of Tile: 15.78
+
+Number: 90
+Mean of BFS: 104.02 	 Standard Deviation of BFS: 20.93
+Mean of DFS: 164.63 	 Standard Deviation of DFS: 113.55
+Mean of Tile: 254.97 	 Standard Deviation of Tile: 15.48
+
+Number: 95
+Mean of BFS: 104.63 	 Standard Deviation of BFS: 20.81
+Mean of DFS: 164.03 	 Standard Deviation of DFS: 113.71
+Mean of Tile: 254.52 	 Standard Deviation of Tile: 15.20
+
+Number: 100
+Mean of BFS: 103.86 	 Standard Deviation of BFS: 20.62
+Mean of DFS: 164.06 	 Standard Deviation of DFS: 113.06
+Mean of Tile: 254.56 	 Standard Deviation of Tile: 15.33
+
+Experiment 4:
+
+Number: 5
+Mean of BFS: 354.80 	 Standard Deviation of BFS: 71.56
+Mean of DFS: 119.80 	 Standard Deviation of DFS: 34.80
+Mean of Tile: 2012.00 	 Standard Deviation of Tile: 66.83
+
+Number: 10
+Mean of BFS: 326.00 	 Standard Deviation of BFS: 62.46
+Mean of DFS: 109.50 	 Standard Deviation of DFS: 43.89
+Mean of Tile: 1974.30 	 Standard Deviation of Tile: 60.80
+
+Number: 15
+Mean of BFS: 320.40 	 Standard Deviation of BFS: 78.12
+Mean of DFS: 124.07 	 Standard Deviation of DFS: 75.18
+Mean of Tile: 1960.27 	 Standard Deviation of Tile: 53.88
+
+Number: 20
+Mean of BFS: 311.15 	 Standard Deviation of BFS: 71.45
+Mean of DFS: 130.10 	 Standard Deviation of DFS: 77.17
+Mean of Tile: 1957.20 	 Standard Deviation of Tile: 48.17
+
+Number: 25
+Mean of BFS: 307.60 	 Standard Deviation of BFS: 65.10
+Mean of DFS: 139.08 	 Standard Deviation of DFS: 72.16
+Mean of Tile: 1983.00 	 Standard Deviation of Tile: 92.63
+
+Number: 30
+Mean of BFS: 310.43 	 Standard Deviation of BFS: 66.99
+Mean of DFS: 140.83 	 Standard Deviation of DFS: 72.57
+Mean of Tile: 1975.37 	 Standard Deviation of Tile: 86.43
+
+Number: 35
+Mean of BFS: 313.37 	 Standard Deviation of BFS: 71.56
+Mean of DFS: 149.83 	 Standard Deviation of DFS: 81.59
+Mean of Tile: 1986.57 	 Standard Deviation of Tile: 92.96
+
+Number: 40
+Mean of BFS: 319.02 	 Standard Deviation of BFS: 73.51
+Mean of DFS: 149.75 	 Standard Deviation of DFS: 80.66
+Mean of Tile: 1980.88 	 Standard Deviation of Tile: 88.29
+
+Number: 45
+Mean of BFS: 323.31 	 Standard Deviation of BFS: 74.71
+Mean of DFS: 167.18 	 Standard Deviation of DFS: 110.88
+Mean of Tile: 1975.13 	 Standard Deviation of Tile: 84.91
+
+Number: 50
+Mean of BFS: 324.02 	 Standard Deviation of BFS: 74.48
+Mean of DFS: 160.20 	 Standard Deviation of DFS: 107.58
+Mean of Tile: 1971.22 	 Standard Deviation of Tile: 81.48
+
+Number: 55
+Mean of BFS: 323.65 	 Standard Deviation of BFS: 75.09
+Mean of DFS: 160.29 	 Standard Deviation of DFS: 106.85
+Mean of Tile: 1971.89 	 Standard Deviation of Tile: 82.01
+
+Number: 60
+Mean of BFS: 319.92 	 Standard Deviation of BFS: 74.30
+Mean of DFS: 165.42 	 Standard Deviation of DFS: 118.78
+Mean of Tile: 1978.73 	 Standard Deviation of Tile: 93.42
+
+Number: 65
+Mean of BFS: 319.31 	 Standard Deviation of BFS: 72.53
+Mean of DFS: 163.97 	 Standard Deviation of DFS: 115.50
+Mean of Tile: 1983.03 	 Standard Deviation of Tile: 94.74
+
+Number: 70
+Mean of BFS: 318.20 	 Standard Deviation of BFS: 71.14
+Mean of DFS: 162.44 	 Standard Deviation of DFS: 113.00
+Mean of Tile: 1982.11 	 Standard Deviation of Tile: 93.23
+
+Number: 75
+Mean of BFS: 320.48 	 Standard Deviation of BFS: 72.35
+Mean of DFS: 167.72 	 Standard Deviation of DFS: 120.59
+Mean of Tile: 1979.13 	 Standard Deviation of Tile: 90.79
+
+Number: 80
+Mean of BFS: 319.40 	 Standard Deviation of BFS: 73.55
+Mean of DFS: 173.45 	 Standard Deviation of DFS: 128.71
+Mean of Tile: 1975.92 	 Standard Deviation of Tile: 88.86
+
+Number: 85
+Mean of BFS: 319.85 	 Standard Deviation of BFS: 74.10
+Mean of DFS: 171.28 	 Standard Deviation of DFS: 126.73
+Mean of Tile: 1973.49 	 Standard Deviation of Tile: 86.87
+
+Number: 90
+Mean of BFS: 320.87 	 Standard Deviation of BFS: 73.70
+Mean of DFS: 168.68 	 Standard Deviation of DFS: 124.02
+Mean of Tile: 1980.44 	 Standard Deviation of Tile: 95.28
+
+Number: 95
+Mean of BFS: 324.06 	 Standard Deviation of BFS: 75.16
+Mean of DFS: 170.21 	 Standard Deviation of DFS: 121.30
+Mean of Tile: 1979.32 	 Standard Deviation of Tile: 93.16
+
+Number: 100
+Mean of BFS: 323.84 	 Standard Deviation of BFS: 75.19
+Mean of DFS: 172.37 	 Standard Deviation of DFS: 119.58
+Mean of Tile: 1983.02 	 Standard Deviation of Tile: 95.04
+
+Experiment 5:
+
+Number: 5
+Mean of BFS: 297.60 	 Standard Deviation of BFS: 23.17
+Mean of DFS: 226.20 	 Standard Deviation of DFS: 114.64
+Mean of Tile: 2834.00 	 Standard Deviation of Tile: 87.76
+
+Number: 10
+Mean of BFS: 291.70 	 Standard Deviation of BFS: 20.03
+Mean of DFS: 245.00 	 Standard Deviation of DFS: 101.54
+Mean of Tile: 2900.20 	 Standard Deviation of Tile: 221.82
+
+Number: 15
+Mean of BFS: 296.27 	 Standard Deviation of BFS: 27.21
+Mean of DFS: 239.73 	 Standard Deviation of DFS: 96.17
+Mean of Tile: 2846.80 	 Standard Deviation of Tile: 196.65
+
+Number: 20
+Mean of BFS: 296.55 	 Standard Deviation of BFS: 32.18
+Mean of DFS: 226.35 	 Standard Deviation of DFS: 97.02
+Mean of Tile: 2827.90 	 Standard Deviation of Tile: 174.04
+
+Number: 25
+Mean of BFS: 312.88 	 Standard Deviation of BFS: 43.60
+Mean of DFS: 210.24 	 Standard Deviation of DFS: 95.34
+Mean of Tile: 2836.36 	 Standard Deviation of Tile: 176.92
+
+Number: 30
+Mean of BFS: 312.23 	 Standard Deviation of BFS: 45.53
+Mean of DFS: 196.17 	 Standard Deviation of DFS: 93.07
+Mean of Tile: 2831.60 	 Standard Deviation of Tile: 166.63
+
+Number: 35
+Mean of BFS: 318.80 	 Standard Deviation of BFS: 48.20
+Mean of DFS: 193.29 	 Standard Deviation of DFS: 94.24
+Mean of Tile: 2816.40 	 Standard Deviation of Tile: 159.02
+
+Number: 40
+Mean of BFS: 315.10 	 Standard Deviation of BFS: 47.96
+Mean of DFS: 187.28 	 Standard Deviation of DFS: 92.55
+Mean of Tile: 2807.20 	 Standard Deviation of Tile: 150.82
+
+Number: 45
+Mean of BFS: 313.07 	 Standard Deviation of BFS: 47.66
+Mean of DFS: 184.44 	 Standard Deviation of DFS: 92.36
+Mean of Tile: 2820.96 	 Standard Deviation of Tile: 166.31
+
+Number: 50
+Mean of BFS: 315.22 	 Standard Deviation of BFS: 48.82
+Mean of DFS: 175.88 	 Standard Deviation of DFS: 91.36
+Mean of Tile: 2813.74 	 Standard Deviation of Tile: 159.44
+
+Number: 55
+Mean of BFS: 317.84 	 Standard Deviation of BFS: 49.70
+Mean of DFS: 174.02 	 Standard Deviation of DFS: 92.15
+Mean of Tile: 2813.45 	 Standard Deviation of Tile: 154.94
+
+Number: 60
+Mean of BFS: 317.73 	 Standard Deviation of BFS: 48.43
+Mean of DFS: 168.25 	 Standard Deviation of DFS: 90.30
+Mean of Tile: 2807.17 	 Standard Deviation of Tile: 150.03
+
+Number: 65
+Mean of BFS: 317.42 	 Standard Deviation of BFS: 48.22
+Mean of DFS: 163.92 	 Standard Deviation of DFS: 88.11
+Mean of Tile: 2801.71 	 Standard Deviation of Tile: 145.69
+
+Number: 70
+Mean of BFS: 316.17 	 Standard Deviation of BFS: 48.74
+Mean of DFS: 164.90 	 Standard Deviation of DFS: 87.36
+Mean of Tile: 2806.96 	 Standard Deviation of Tile: 149.30
+
+Number: 75
+Mean of BFS: 314.89 	 Standard Deviation of BFS: 48.59
+Mean of DFS: 164.76 	 Standard Deviation of DFS: 86.81
+Mean of Tile: 2805.43 	 Standard Deviation of Tile: 147.83
+
+Number: 80
+Mean of BFS: 319.91 	 Standard Deviation of BFS: 53.05
+Mean of DFS: 164.26 	 Standard Deviation of DFS: 85.64
+Mean of Tile: 2804.71 	 Standard Deviation of Tile: 144.50
+
+Number: 85
+Mean of BFS: 327.20 	 Standard Deviation of BFS: 60.94
+Mean of DFS: 163.25 	 Standard Deviation of DFS: 85.03
+Mean of Tile: 2805.75 	 Standard Deviation of Tile: 141.54
+
+Number: 90
+Mean of BFS: 330.02 	 Standard Deviation of BFS: 61.52
+Mean of DFS: 159.83 	 Standard Deviation of DFS: 83.83
+Mean of Tile: 2841.36 	 Standard Deviation of Tile: 212.85
+
+Number: 95
+Mean of BFS: 333.72 	 Standard Deviation of BFS: 63.14
+Mean of DFS: 157.45 	 Standard Deviation of DFS: 82.45
+Mean of Tile: 2877.35 	 Standard Deviation of Tile: 258.44
+
+Number: 100
+Mean of BFS: 334.12 	 Standard Deviation of BFS: 62.19
+Mean of DFS: 158.21 	 Standard Deviation of DFS: 82.81
+Mean of Tile: 2913.82 	 Standard Deviation of Tile: 298.76
+

@@ -3,15 +3,17 @@ using System.Collections.Generic;
 using UnityEngine;
 using System.Linq;
 using System.Text;
+using System.Diagnostics;
 
-public class DFSGraphSeeker : MonoBehaviour
+public class BFSGraphSeeker : MonoBehaviour
 {
     private enum Mode
     {
         Scan,
         Plan,
         Move,
-        Failed
+        Failed,
+        FoundHider
     }
     private enum Direction
     {
@@ -35,17 +37,40 @@ public class DFSGraphSeeker : MonoBehaviour
     private Mode currMode = Mode.Scan;
     private float timer = 0f;
     private Collider2D innerWallCollider;
+    private Collider2D hiderCollider;
     private HashSet<int> removedBlocks = new HashSet<int>();
     private HashSet<int> exploredBlocks = new HashSet<int>();
 
-    private Stack<int> blocksToExplore = new Stack<int>();
+    private Queue<int> blocksToExplore = new Queue<int>();
     private Stack<int> path = new Stack<int>();
+
+    public bool debug;
+    private bool running;
+    public GameObject experimentObject;
+    private Experiment experiment;
+
+    private Stopwatch watch;
 
     // Start is called before the first frame update
     void Start()
     {
+        this.experiment = this.experimentObject.GetComponent<Experiment>();
+        this.innerWallCollider = GameObject.FindGameObjectsWithTag("Inner")[0].GetComponent<Collider2D>() as Collider2D;
+        this.hiderCollider = GameObject.FindGameObjectsWithTag("Hider")[0].GetComponent<Collider2D>() as Collider2D;
+
+        Reset();
+    }
+
+    public void Reset()
+    {
+        this.removedBlocks = new HashSet<int>();
+        this.exploredBlocks = new HashSet<int>();
+        this.blocksToExplore = new Queue<int>();
+
+        this.currMode = Mode.Scan;
+
         int finalBlock = rows * cols - 1;
-        // Debug.Log($"Final block: {finalBlock}");
+        // UnityEngine.Debug.Log($"Final block: {finalBlock}");
 
         this.blockGraph = new bool[finalBlock + 1, finalBlock + 1];
         for (int i = 0; i < finalBlock; i++)
@@ -90,26 +115,40 @@ public class DFSGraphSeeker : MonoBehaviour
                 }
             }
         }
-
-        this.innerWallCollider = GameObject.FindGameObjectsWithTag("Inner")[0].GetComponent<Collider2D>() as Collider2D;
     }
 
     // Update is called once per frame
     void Update()
     {
-        doUpdate();
-        // this.timer += Time.deltaTime;
-        // if (this.timer > this.timeStep)
-        // {
-        //     doUpdate();
-        //     this.timer = 0f;
-        // }
+        if (!this.running)
+        {
+            return;
+        }
+
+        if (this.isPointWithinHiderCollider(this.transform.position))
+        {
+            this.currMode = Mode.FoundHider;
+        }
+
+        if (!debug)
+        {
+            doUpdate();
+        }
+        else
+        {
+            this.timer += Time.deltaTime;
+            if (this.timer > this.timeStep)
+            {
+                doUpdate();
+                this.timer = 0f;
+            }
+        }
     }
 
     private void doUpdate()
     {
         this.exploredBlocks.Add(this.mapCoordinatesToBlock(this.transform.position));
-        // Debug.Log($"Current mode: {this.currMode}");
+        // UnityEngine.Debug.Log($"Current mode: {this.currMode}");
         if (this.currMode == Mode.Scan)
         {
             this.scan();
@@ -134,7 +173,7 @@ public class DFSGraphSeeker : MonoBehaviour
                     this.currMode = Mode.Failed;
                     return;
                 }
-                this.nextBlock = this.blocksToExplore.Pop();
+                this.nextBlock = this.blocksToExplore.Dequeue();
                 this.generatePath(this.mapCoordinatesToBlock(this.transform.position), this.nextBlock);
                 return;
             }
@@ -153,9 +192,33 @@ public class DFSGraphSeeker : MonoBehaviour
         }
         else if (this.currMode == Mode.Failed)
         {
-            Debug.Log("No path to hider!");
-            Debug.Break();
+            // UnityEngine.Debug.Log("No path to hider!");
+            // UnityEngine.Debug.Break();
+            done(false);
         }
+        else if (this.currMode == Mode.FoundHider)
+        {
+            done(true);
+        }
+    }
+
+    public void Run()
+    {
+        this.running = true;
+        this.Reset();
+        this.watch = Stopwatch.StartNew();
+    }
+
+    public void Stop()
+    {
+        this.running = false;
+        this.watch.Stop();
+    }
+
+    private void done(bool found)
+    {
+        this.Stop();
+        this.experiment.NotifyDone(found, this.watch.ElapsedMilliseconds);
     }
 
     private void scan()
@@ -189,6 +252,11 @@ public class DFSGraphSeeker : MonoBehaviour
             }
         }
         return res;
+    }
+
+    private bool isPointWithinHiderCollider(Vector2 point)
+    {
+        return this.isPointWithinCollider(this.hiderCollider, point);
     }
 
     private bool isPointWithinInnerWallCollider(Vector2 point)
@@ -289,7 +357,7 @@ public class DFSGraphSeeker : MonoBehaviour
         while (searchQueue.Count != 0)
         {
             int curr = searchQueue.Dequeue();
-            // Debug.Log($"Searching: {curr}");
+            // UnityEngine.Debug.Log($"Searching: {curr}");
             visited[curr] = true;
             for (int i = 0; i < this.blockGraph.GetLength(0); i++)
             {
@@ -318,13 +386,15 @@ public class DFSGraphSeeker : MonoBehaviour
 
     private Direction[] allDirectionEnums()
     {
-        return new Direction[] { Direction.N, Direction.NE, Direction.E, Direction.SE, Direction.S, Direction.SW, Direction.W, Direction.NW };
+        Direction[] dirs = new Direction[] { Direction.N, Direction.NE, Direction.E, Direction.SE, Direction.S, Direction.SW, Direction.W, Direction.NW };
+        System.Random rand = new System.Random();
+        return dirs.OrderBy(x => rand.Next()).ToArray();
     }
 
     private void getNextMove()
     {
         int currBlock = this.mapCoordinatesToBlock(this.transform.position);
-        // Debug.Log($"Current block: {currBlock}");
+        // UnityEngine.Debug.Log($"Current block: {currBlock}");
         if (this.nextBlock == -1)
         {
             StringBuilder sb = new StringBuilder();
@@ -332,7 +402,7 @@ public class DFSGraphSeeker : MonoBehaviour
             {
                 sb.Append($"{i} ->");
             }
-            Debug.Log(sb.ToString());
+            // UnityEngine.Debug.Log(sb.ToString());
 
             foreach (Direction dir in this.allDirectionEnums())
             {
@@ -344,8 +414,8 @@ public class DFSGraphSeeker : MonoBehaviour
                 }
                 if (blockInDirection != -1 && !this.removedBlocks.Contains(blockInDirection) && !this.exploredBlocks.Contains(blockInDirection) && !this.blocksToExplore.Contains(blockInDirection))
                 {
-                    // Debug.Log($"Adding {nextBlock}");
-                    this.blocksToExplore.Push(blockInDirection);
+                    // UnityEngine.Debug.Log($"Adding {nextBlock}");
+                    this.blocksToExplore.Enqueue(blockInDirection);
                 }
             }
             if (this.blocksToExplore.Count == 0)
@@ -353,7 +423,7 @@ public class DFSGraphSeeker : MonoBehaviour
                 this.currMode = Mode.Failed;
                 return;
             }
-            this.nextBlock = this.blocksToExplore.Pop();
+            this.nextBlock = this.blocksToExplore.Dequeue();
             this.generatePath(currBlock, this.nextBlock);
             this.currMode = Mode.Move;
         }
@@ -370,7 +440,7 @@ public class DFSGraphSeeker : MonoBehaviour
         {
             return;
         }
-        // Debug.Log($"Removing {block}");
+        // UnityEngine.Debug.Log($"Removing {block}");
         this.removedBlocks.Add(block);
         if (!(EnumerableUtility.Range(0, rows * cols - cols + 1, cols).Contains(block)))
         {

@@ -4,6 +4,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 using System.Linq;
+using System.Diagnostics;
 
 public class TileSeeker : MonoBehaviour
 {
@@ -18,7 +19,7 @@ public class TileSeeker : MonoBehaviour
         Seen,
         Unknown
     }
-    private enum Mode
+    public enum Mode
     {
         ReadyToScan,
         Scan,
@@ -30,9 +31,10 @@ public class TileSeeker : MonoBehaviour
         ScanWall,
         MoveToCorner,
         FindCorner,
-        FoundHider
+        FoundHider,
+        Failed
     }
-    private Mode currMode;
+    public Mode currMode;
 
     ////////////////////////////////////////
     // SETUP VARIABLES                   //
@@ -43,16 +45,15 @@ public class TileSeeker : MonoBehaviour
 
     private bool seesHider;
 
-    private float moveRotation;
-    private float currMoveRotation;
-    private float rotationAmountBeforeMove;
+    public float moveRotation;
+    public float currMoveRotation;
+    public float rotationAmountBeforeMove;
 
     /////////////////////////////////////
     // SCANNING VARIABLES             //
     ///////////////////////////////////
-    private Stack<Vector3> wallPoints = new Stack<Vector3>();
-    private Stack<Vector2> currCorners = new Stack<Vector2>();
-    private bool foundCorner = false;
+    public Stack<Vector3> wallPoints = new Stack<Vector3>();
+    public Stack<Vector2> currCorners = new Stack<Vector2>();
 
     ////////////////////////////////////////
     // WALL SCANNING VARIABLES           //
@@ -89,13 +90,46 @@ public class TileSeeker : MonoBehaviour
     public float timeStep = 1f;
     public float timeStepScanWall;
     private float timer = 0f;
-    private System.Random random;
     private Dictionary<int, bool> locationMap;
+    private bool running = false;
+    public bool debug;
+
+    private Stopwatch watch;
+    public GameObject experimentObject;
+    private Experiment experiment;
 
     // Start is called before the first frame update
     void Start()
     {
-        this.random = new System.Random();
+        this.experiment = this.experimentObject.GetComponent<Experiment>() as Experiment;
+        this.innerWallCollider = GameObject.FindGameObjectsWithTag("Inner")[0].GetComponent<Collider2D>() as Collider2D;
+        this.hiderCollider = GameObject.FindGameObjectsWithTag("Hider")[0].GetComponent<Collider2D>() as Collider2D;
+
+        Reset();
+        // Run();
+    }
+
+    public void Reset()
+    {
+        this.wallPoints = new Stack<Vector3>();
+        this.currCorners = new Stack<Vector2>();
+        this.horizontalWalls = new List<Wall>();
+        this.verticalWalls = new List<Wall>();
+        this.rooms = new List<Room>();
+        this.originalPoint = Vector2.positiveInfinity;
+        this.horizontalWall = false;
+        this.otherCorner = 200 * Vector2.one;
+        this.cornersSeen = new HashSet<Vector2>();
+        this.cornerLocation = Vector2.zero;
+        this.wentOtherDirection = false;
+        this.cornerUpdate = 0f;
+        this.path = new Stack<int>();
+        this.goalBlock = -1;
+        this.lookingDirection = 0;
+        this.currRotation = 0;
+        this.didRotate = false;
+        this.removedBlocks = new HashSet<int>();
+
 
         this.currMode = Mode.ReadyToScan;
         this.seesHider = false;
@@ -103,11 +137,8 @@ public class TileSeeker : MonoBehaviour
         line.positionCount = 2;
         line.material.color = Color.black;
 
-        this.innerWallCollider = GameObject.FindGameObjectsWithTag("Inner")[0].GetComponent<Collider2D>() as Collider2D;
-        this.hiderCollider = GameObject.FindGameObjectsWithTag("Hider")[0].GetComponent<Collider2D>() as Collider2D;
-
         int finalVertex = (this.rows + 1) * (this.cols + 1);
-        // Debug.Log($"Final vertex: {finalVertex}");
+        // UnityEngine.Debug.Log($"Final vertex: {finalVertex}");
         edges = new Map[finalVertex + 1, finalVertex + 1];
 
         float topPoint = originPoint.y;
@@ -167,7 +198,7 @@ public class TileSeeker : MonoBehaviour
         }
 
         int finalBlock = rows * cols - 1;
-        // Debug.Log($"Final block: {finalBlock}");
+        // UnityEngine.Debug.Log($"Final block: {finalBlock}");
 
         this.blockGraph = new bool[finalBlock + 1, finalBlock + 1];
         for (int i = 0; i < finalBlock; i++)
@@ -220,14 +251,57 @@ public class TileSeeker : MonoBehaviour
         }
     }
 
+    private void done(bool found)
+    {
+        this.Stop();
+        this.experiment.NotifyDone(found, this.watch.ElapsedMilliseconds);
+    }
+
+    public void Run()
+    {
+        this.running = true;
+        this.Reset();
+        this.watch = Stopwatch.StartNew();
+    }
+
+    public void Stop()
+    {
+        this.running = false;
+        this.watch.Stop();
+    }
+
     // Update is called once per frame
     void Update()
     {
+        if (!this.running)
+        {
+            return;
+        }
+
+        if (this.watch.ElapsedMilliseconds > 1000 * 60 * 5)
+        {
+            // if game has been running for more than five minutes, it's probably stuck!
+            this.currMode = Mode.Failed;
+        }
+
+        Vector2 position = this.transform.position;
+        float xSub = Mathf.Floor(position.x);
+        float ySub = Mathf.Floor(position.y);
+        float xAbs = Mathf.Abs(position.x - xSub - 0.5f);
+        float yAbs = Mathf.Abs(position.y - ySub - 0.5f);
+        if (xAbs >= Mathf.Pow(10, -3) || yAbs >= Mathf.Pow(10, -3))
+        {
+            // UnityEngine.Debug.Log($"({position.x}, {xSub}, {xAbs}) - ({position.y}, {ySub}, {yAbs})");
+            float xPos = xSub + 0.5f;
+            float yPos = ySub + 0.5f;
+            this.transform.position = new Vector3(xPos, yPos, 0);
+        }
+
         if (this.isPointWithinHiderCollider(this.transform.position))
         {
             this.currMode = Mode.FoundHider;
-            return;
         }
+
         this.locationMap[this.mapCoordinatesToBlock(this.transform.position)] = true;
         float xDir = (float)Math.Cos(this.lookingDirection * Math.PI / 180);
         float yDir = (float)Math.Sin(this.lookingDirection * Math.PI / 180);
@@ -235,31 +309,75 @@ public class TileSeeker : MonoBehaviour
         Vector3 dir = new Vector3(xDir, yDir, 0);
         Ray ray = new Ray(this.transform.position, dir);
 
-        // line.SetPosition(0, ray.origin);
-        // line.SetPosition(1, ray.origin + ray.direction);
-
-        doUpdate();
-        // this.timer += Time.deltaTime;
-        // if (this.currMode == Mode.ScanWall)
-        // {
-        //     if (this.timer > this.timeStepScanWall)
-        //     {
-        //         doUpdate();
-        //         this.timer = 0;
-        //     }
-        // }
-        // else
-        // {
-        //     if (this.timer > this.timeStep)
-        //     {
-        //         doUpdate();
-        //         this.timer = 0;
-        //     }
-        // }
+        if (debug)
+        {
+            line.SetPosition(0, ray.origin);
+            line.SetPosition(1, ray.origin + ray.direction);
+            this.timer += Time.deltaTime;
+            if (this.currMode == Mode.ScanWall)
+            {
+                if (this.timer > this.timeStepScanWall)
+                {
+                    doUpdate();
+                    this.timer = 0;
+                }
+            }
+            else
+            {
+                if (this.timer > this.timeStep)
+                {
+                    doUpdate();
+                    this.timer = 0;
+                }
+            }
+        }
+        else
+        {
+            doUpdate();
+        }
     }
 
     private void doUpdate()
     {
+        // UnityEngine.Debug.Log(this.currMode);
+        // scan in all 8 directions
+        if (this.currMode != Mode.FoundHider)
+        {
+            for (int y = -1; y <= 1; y++)
+            {
+                bool found = false;
+                for (int x = -1; x <= 1; x++)
+                {
+                    if (x == 0 && y == 0) continue;
+                    RaycastHit2D hit = this.raycast(new Vector2(x, y));
+                    if (hit.collider.gameObject.tag.Equals("Hider"))
+                    {
+                        // Vector3 hiderPosition = hit.collider.transform.position;
+
+                        // float angle = Vector2.SignedAngle(hiderPosition - this.transform.position, this.myDirectionVector());
+                        // this.lookingDirection -= angle;
+                        // this.transform.Rotate(new Vector3(0, 0, -angle));
+
+                        this.seesHider = true;
+                        this.transform.position = this.transform.position + new Vector3(x, y, 0);
+
+                        if (this.isPointWithinHiderCollider(this.transform.position))
+                        {
+                            this.done(true);
+                        }
+
+                        this.didRotate = false;
+                        this.currRotation = 0;
+                        this.currMode = Mode.Scan;
+
+                        found = true;
+                        break;
+                    }
+                }
+                if (found) break;
+            }
+        }
+
         if (this.currMode == Mode.RotateToMove)
         {
             this.rotateToMove();
@@ -282,7 +400,6 @@ public class TileSeeker : MonoBehaviour
         else if (this.currMode == Mode.ReadyToMove)
         {
             this.readyToMove();
-            this.currMode = Mode.RotateToMove;
             this.doUpdate();
         }
         else if (this.currMode == Mode.Scan)
@@ -294,7 +411,6 @@ public class TileSeeker : MonoBehaviour
             this.didRotate = false;
             this.currRotation = 0;
             this.currMode = Mode.Scan;
-            this.foundCorner = false;
         }
         else if (this.currMode == Mode.ScanWallStart)
         {
@@ -310,10 +426,11 @@ public class TileSeeker : MonoBehaviour
         }
         else if (this.currMode == Mode.EnvLearn)
         {
+            this.ensureWalls();
             this.mergeWalls();
             bool madeRoom = this.makeRooms();
 
-            // Debug.Log(this.cornerLocation);
+            // UnityEngine.Debug.Log(this.cornerLocation);
             // decide
             if (madeRoom)
             {
@@ -329,7 +446,11 @@ public class TileSeeker : MonoBehaviour
         }
         else if (this.currMode == Mode.FoundHider)
         {
-            // filler
+            this.done(true);
+        }
+        else if (this.currMode == Mode.Failed)
+        {
+            this.done(false);
         }
     }
 
@@ -350,7 +471,7 @@ public class TileSeeker : MonoBehaviour
 
     private void scan()
     {
-        if (this.currRotation == 360)
+        if (this.currRotation >= 360)
         {
             if (this.wallPoints.Count == 0)
             {
@@ -383,7 +504,7 @@ public class TileSeeker : MonoBehaviour
 
             Vector3 dir = this.myDirectionVector();
 
-            RaycastHit2D hit = Physics2D.Raycast(this.transform.position, dir, Mathf.Infinity, PLAYER_MASK);
+            RaycastHit2D hit = this.raycast(dir);
             if (hit.collider.gameObject.tag.Equals("Hider"))
             {
                 this.transform.position = this.transform.position + this.movement();
@@ -396,7 +517,7 @@ public class TileSeeker : MonoBehaviour
             }
 
             bool seesInnerWall = markEdges(this.transform.position, hit.point, new Vector2(dir.x, dir.y));
-            // Debug.Log($"Sees Inner Wall: {seesInnerWall}, Is On Wall: {isOnSeenWall(hit.point)}");
+            // UnityEngine.Debug.Log($"Sees Inner Wall: {seesInnerWall}, Is On Wall: {isOnSeenWall(hit.point)}");
             if (seesInnerWall && !this.isOnSeenWall(hit.point))
             {
                 // add the point to walls to scan
@@ -471,21 +592,22 @@ public class TileSeeker : MonoBehaviour
         {
             if (this.currCorners.Count == 0)
             {
+                // UnityEngine.Debug.Log("Out of corners!");
                 this.currMode = Mode.ReadyToMove;
                 return;
             }
             this.cornerLocation = this.currCorners.Pop();
             Vector2 nodeLocation = this.closestNode(this.cornerLocation);
-            // Debug.Log($"Node location: {nodeLocation}");
+            // UnityEngine.Debug.Log($"Node location: {nodeLocation}");
             float node = Mathf.Round(this.mapNode(nodeLocation.y, nodeLocation.x));
-            // Debug.Log($"Node: {node}");
+            // UnityEngine.Debug.Log($"Node: {node}");
             List<Vector2> edges = this.edgesForNode(node);
 
             Vector2 top = edges[0];
             Vector2 right = edges[1];
             Vector2 left = edges[2];
             Vector2 down = edges[3];
-            // Debug.Log($"{top}, {right}, {down}, {left}");
+            // UnityEngine.Debug.Log($"{top}, {right}, {down}, {left}");
 
             Map topMap = this.edges[Mathf.RoundToInt(top.x), Mathf.RoundToInt(top.y)];
             Map rightMap = this.edges[Mathf.RoundToInt(right.x), Mathf.RoundToInt(right.y)];
@@ -496,16 +618,20 @@ public class TileSeeker : MonoBehaviour
 
             if (blocks.Count == 0)
             {
-                Debug.Log($"Found no blocks! {this.cornerLocation}");
-                Debug.Log($"{topMap}-{rightMap}-{downMap}-{leftMap}");
-                Debug.Break();
+                // UnityEngine.Debug.Log($"Found no blocks! {this.cornerLocation}");
+                // UnityEngine.Debug.Log($"{topMap}-{rightMap}-{downMap}-{leftMap}");
+                // UnityEngine.Debug.Break();
+                this.currMode = Mode.ReadyToMove;
+                return;
             }
 
-            int blockChoice = (int)blocks[this.random.Next(blocks.Count)];
-            // Debug.Log($"Block choice: {blockChoice}");
+            int blockChoice = blocks[Mathf.FloorToInt(UnityEngine.Random.value * blocks.Count)];
+            // UnityEngine.Debug.Log($"Block choice: {blockChoice}");
 
             this.goalBlock = blockChoice;
         }
+
+        // UnityEngine.Debug.Log($"Goal block: {this.goalBlock}");
 
 
         this.generatePath(this.mapCoordinatesToBlock(this.transform.position), this.goalBlock);
@@ -517,7 +643,7 @@ public class TileSeeker : MonoBehaviour
         // {
         //     sb.Append($" -> {block}");
         // }
-        // Debug.Log(sb.ToString());
+        // UnityEngine.Debug.Log(sb.ToString());
 
         this.currMode = Mode.ReadyToMove;
     }
@@ -552,7 +678,7 @@ public class TileSeeker : MonoBehaviour
         while (searchQueue.Count != 0)
         {
             int curr = searchQueue.Dequeue();
-            // Debug.Log($"Searching: {curr}");
+            // UnityEngine.Debug.Log($"Searching: {curr}");
             visited[curr] = true;
             for (int i = 0; i < this.blockGraph.GetLength(0); i++)
             {
@@ -691,6 +817,19 @@ public class TileSeeker : MonoBehaviour
         }
         else if (countUnknown == 0)
         {
+            // int numSeen = (new List<Map> { topMap, leftMap, rightMap, downMap }).FindAll(item => item == Map.Seen).Count;
+            // if (numSeen == 3)
+            // {
+            //     if (leftMap == Map.InnerWall)
+            //     {
+            //         blocks.Add(this.mapCoordinatesToBlock(new Vector2(x - 0.5f, y - 0.5f)));
+            //     }
+            //     else if (rightMap == Map.InnerWall)
+            //     {
+            //         blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y - 0.5f)));
+            //     }
+            // }
+
             if (leftMap == Map.InnerWall && downMap == Map.InnerWall)
             {
                 blocks.Add(this.mapCoordinatesToBlock(new Vector2(x + 0.5f, y - 0.5f)));
@@ -802,14 +941,14 @@ public class TileSeeker : MonoBehaviour
         }
 
         List<int> res = new List<int>();
-        StringBuilder sb = new StringBuilder();
-        sb.Append("Blocks: ");
+        // StringBuilder sb = new StringBuilder();
+        // sb.Append("Blocks: ");
         foreach (int i in blocks)
         {
-            sb.Append($"{i},");
+            // sb.Append($"{i},");
             res.Add(i);
         }
-        Debug.Log(sb.ToString());
+        // UnityEngine.Debug.Log(sb.ToString());
 
         return res;
     }
@@ -874,13 +1013,16 @@ public class TileSeeker : MonoBehaviour
         Vector3 wallPoint = this.wallPoints.Pop();
         while (this.isOnSeenWall(wallPoint))
         {
+            // UnityEngine.Debug.Log($"Round and round ... {this.wallPoints.Count}");
             if (this.wallPoints.Count == 0)
             {
+                // UnityEngine.Debug.Log("Returning...");
                 this.currMode = Mode.EnvLearn;
                 return;
             }
             wallPoint = this.wallPoints.Pop();
         }
+        // UnityEngine.Debug.Log("Left while loop ...");
 
         // rotate to face the initial position of scanning the wall
         float angle = Vector2.SignedAngle(wallPoint - this.transform.position, this.myDirectionVector());
@@ -920,9 +1062,11 @@ public class TileSeeker : MonoBehaviour
         else
         {
             choice = leftHit;
-            Debug.Log("Got an invalid state when about to scan a wall ...");
-            Debug.Break();
-            Application.Quit();
+            this.currMode = Mode.Failed;
+            return;
+            // UnityEngine.Debug.Log("Got an invalid state when about to scan a wall ...");
+            // UnityEngine.Debug.Break();
+            // Application.Quit();
         }
 
         this.originalDirectionBeforeWallScan = this.lookingDirection;
@@ -938,7 +1082,7 @@ public class TileSeeker : MonoBehaviour
         this.otherCorner = 200 * Vector2.one;
 
         this.horizontalWall = Mathf.Abs(this.originalPoint.y - choice.point.y) < Mathf.Pow(10, -3);
-        // Debug.Log($"Horizontal Wall? {horizontalWall}");
+        // UnityEngine.Debug.Log($"Horizontal Wall? {horizontalWall}");
 
         this.currMode = Mode.ScanWall;
     }
@@ -988,16 +1132,14 @@ public class TileSeeker : MonoBehaviour
         if (hit.collider.tag.Equals("Outer") || Mathf.Abs(this.currCornerDistance - this.lastCornerDistance) > 0.5f || this.leftWall(this.currCornerSearch) || this.isOnSeenWall(currCornerSearch))
         {
             Vector2 coordinates = new Vector2(Mathf.Round(this.lastCornerSearch.x), Mathf.Round(this.lastCornerSearch.y));
-            Debug.Log($"Coordinates of a corner: {coordinates}");
-            // Debug.Log(this.lastCornerSearch);
+            // UnityEngine.Debug.Log($"Coordinates of a corner: {coordinates}");
+            // UnityEngine.Debug.Log(this.lastCornerSearch);
 
-            // Debug.Log($"Contains coordinates {coordinates}? {this.cornersSeen.Contains(coordinates)}");
+            // UnityEngine.Debug.Log($"Contains coordinates {coordinates}? {this.cornersSeen.Contains(coordinates)}");
 
             if (!this.cornersSeen.Contains(coordinates) && !this.isOnSeenWall(coordinates))
             {
                 this.currCorners.Push(coordinates);
-
-                this.foundCorner = true;
 
                 float rotationAmount = (float)(this.originalDirectionBeforeWallScan - this.lookingDirection);
                 this.lookingDirection = this.originalDirectionBeforeWallScan;
@@ -1033,14 +1175,14 @@ public class TileSeeker : MonoBehaviour
 
             if (this.otherCorner == 200 * Vector2.one)
             {
-                // Debug.Log("Changing other corner!");
+                // UnityEngine.Debug.Log("Changing other corner!");
                 this.otherCorner = coordinates;
                 this.wentOtherDirection = true;
                 this.cornerUpdate = (Mathf.Abs(this.cornerUpdate - CORNERUPDATEPOSITIVE) < Mathf.Pow(10, -3)) ? CORNERUPDATENEGATIVE : CORNERUPDATEPOSITIVE;
             }
             else
             {
-                Debug.Log($"Wall: ({this.otherCorner}, {coordinates})");
+                // UnityEngine.Debug.Log($"Wall: ({this.otherCorner}, {coordinates})");
                 Wall newWall = new Wall(this.otherCorner, coordinates, false);
                 this.addWall(newWall, (newWall.horizontal) ? this.horizontalWalls : this.verticalWalls);
                 this.otherCorner = 200 * Vector2.one;
@@ -1107,7 +1249,6 @@ public class TileSeeker : MonoBehaviour
         }
     }
 
-
     private void mergeWalls(List<Wall> walls, bool horizontal)
     {
         List<Wall> newWalls = new List<Wall>();
@@ -1118,8 +1259,12 @@ public class TileSeeker : MonoBehaviour
 
         bool hasChanged = true;
 
+        int runs = 0;
         do
         {
+            runs++;
+            if (runs >= 5) break;
+
             hasChanged = false;
             List<Wall> currWalls = new List<Wall>();
             HashSet<int> added = new HashSet<int>();
@@ -1134,7 +1279,7 @@ public class TileSeeker : MonoBehaviour
                     }
                     if (this.wallIntersect(newWalls[i], newWalls[j]))
                     {
-                        // Debug.Log($"Merge! {newWalls[i]} + {newWalls[j]}");
+                        // UnityEngine.Debug.Log($"Merge! {newWalls[i]} + {newWalls[j]}");
                         currWalls.Add(this.mergeWalls(newWalls[i], newWalls[j]));
                         hasChanged = true;
                         didMerge = true;
@@ -1156,6 +1301,46 @@ public class TileSeeker : MonoBehaviour
         else
         {
             this.verticalWalls = newWalls;
+        }
+    }
+
+    private void ensureWalls()
+    {
+        foreach (Wall w in this.horizontalWalls)
+        {
+            if (w.permanent) continue;
+
+            float y = w.yMin;
+            float xMin = w.xMin;
+            float xMax = w.xMax;
+            // UnityEngine.Debug.Log($"Horizontal: y={y}, {xMin}=>{xMax}");
+            for (float x = xMin + 0.5f; x < xMax; x += 1f)
+            {
+                Vector2 edge = this.mapPointToEdge(new Vector2(x, y));
+                int nodeOne = Mathf.RoundToInt(edge.x);
+                int nodeTwo = Mathf.RoundToInt(edge.y);
+                this.edges[nodeOne, nodeTwo] = Map.InnerWall;
+                this.edges[nodeTwo, nodeOne] = Map.InnerWall;
+                this.drawEdge(this.mapEdge(nodeOne, nodeTwo), Color.red);
+            }
+        }
+
+        foreach (Wall w in this.verticalWalls)
+        {
+            if (w.permanent) continue;
+
+            float x = w.xMin;
+            float yMin = w.yMin;
+            float yMax = w.yMax;
+            for (float y = yMin + 0.5f; y < yMax; y += 1f)
+            {
+                Vector2 edge = this.mapPointToEdge(new Vector2(x, y));
+                int nodeOne = Mathf.RoundToInt(edge.x);
+                int nodeTwo = Mathf.RoundToInt(edge.y);
+                this.edges[nodeOne, nodeTwo] = Map.InnerWall;
+                this.edges[nodeTwo, nodeOne] = Map.InnerWall;
+                this.drawEdge(this.mapEdge(nodeOne, nodeTwo), Color.red);
+            }
         }
     }
 
@@ -1202,33 +1387,37 @@ public class TileSeeker : MonoBehaviour
         float epsilon = Mathf.Pow(10, -3);
         for (int wallOneIdx = this.horizontalWalls.Count - 1; wallOneIdx >= 0; wallOneIdx--)
         {
+            if (wallOneIdx >= this.horizontalWalls.Count) continue;
             Wall wallOne = this.horizontalWalls[wallOneIdx];
             float yOne = wallOne.yMin;
             for (int wallTwoIdx = this.verticalWalls.Count - 1; wallTwoIdx >= 0; wallTwoIdx--)
             {
+                if (wallTwoIdx >= this.verticalWalls.Count) continue;
                 Wall wallTwo = this.verticalWalls[wallTwoIdx];
                 float xTwo = wallTwo.xMin;
                 if (wallTwo.yMin - epsilon <= yOne && yOne <= wallTwo.yMax + epsilon)
                 {
-                    // Debug.Log($"{wallOne} <-> {wallTwo}");
+                    // UnityEngine.Debug.Log($"{wallOne} <-> {wallTwo}");
                     for (int wallThreeIdx = this.horizontalWalls.Count - 1; wallThreeIdx >= 0; wallThreeIdx--)
                     {
                         if (wallThreeIdx == wallOneIdx)
                         {
                             continue;
                         }
+                        if (wallThreeIdx >= this.horizontalWalls.Count) continue;
                         Wall wallThree = this.horizontalWalls[wallThreeIdx];
                         float yThree = wallThree.yMin;
-                        // Debug.Log()
+                        // UnityEngine.Debug.Log()
                         if (wallThree.xMin - epsilon <= xTwo && xTwo <= wallThree.xMax + epsilon)
                         {
-                            // Debug.Log($"({wallOne}) <-> ({wallTwo}) <-> ({wallThree}");
+                            // UnityEngine.Debug.Log($"({wallOne}) <-> ({wallTwo}) <-> ({wallThree}");
                             for (int wallFourIdx = this.verticalWalls.Count - 1; wallFourIdx >= 0; wallFourIdx--)
                             {
                                 if (wallFourIdx == wallTwoIdx)
                                 {
                                     continue;
                                 }
+                                if (wallFourIdx >= this.verticalWalls.Count) continue;
                                 Wall wallFour = this.verticalWalls[wallFourIdx];
                                 if (wallFour.yMin - epsilon <= yThree && yThree <= wallFour.yMax + epsilon)
                                 {
@@ -1271,25 +1460,29 @@ public class TileSeeker : MonoBehaviour
 
                                                 if (!wallOne.permanent)
                                                 {
+                                                    if (wallOneIdx >= this.horizontalWalls.Count) continue;
                                                     this.horizontalWalls.RemoveAt(wallOneIdx);
                                                 }
 
                                                 if (!wallTwo.permanent)
                                                 {
+                                                    if (wallTwoIdx >= this.verticalWalls.Count) continue;
                                                     this.verticalWalls.RemoveAt(wallTwoIdx);
                                                 }
 
                                                 if (!wallThree.permanent)
                                                 {
+                                                    if (wallThreeIdx >= this.horizontalWalls.Count) continue;
                                                     this.horizontalWalls.RemoveAt(wallThreeIdx);
                                                 }
 
                                                 if (!wallFour.permanent)
                                                 {
+                                                    if (wallFourIdx >= this.verticalWalls.Count) continue;
                                                     this.verticalWalls.RemoveAt(wallFourIdx);
                                                 }
                                                 res = true;
-                                                Debug.Log("Adding a room!");
+                                                // UnityEngine.Debug.Log("Adding a room!");
                                             }
                                         }
                                     }
@@ -1305,6 +1498,7 @@ public class TileSeeker : MonoBehaviour
 
     private void setRoomEntrance(Room room)
     {
+        // UnityEngine.Debug.Log("Setting room entrance ...");
         foreach (int block in this.blocksAdjacentToRoom(room))
         {
             room.blocksEntrance.Add(block);
@@ -1330,7 +1524,6 @@ public class TileSeeker : MonoBehaviour
         xEnd = Mathf.Round(ne.x) + 0.5f;
         yFixed = Mathf.Round(ne.y) + 0.5f;
         // top row
-        // if (yFixed > topPoint || yFixed)
         if (!(yFixed > topPoint || yFixed < bottomPoint))
         {
             for (float x = xStart; x <= xEnd + epsilon; x += 1f)
@@ -1422,12 +1615,13 @@ public class TileSeeker : MonoBehaviour
 
     private bool setRoomCleared(Room room)
     {
+        // UnityEngine.Debug.Log("Setting room cleared ...");
         foreach (int block in this.blocksInRoom(room))
         {
             int numUnknown = this.edgesForBlock(block).Count(t => this.edges[Mathf.RoundToInt(t.x), Mathf.RoundToInt(t.y)] == Map.Unknown);
             if (numUnknown > 0)
             {
-                // Debug.Log($"Unknown: {block}");
+                // UnityEngine.Debug.Log($"Unknown: {block}");
                 room.cleared = false;
                 return false;
             }
@@ -1464,48 +1658,63 @@ public class TileSeeker : MonoBehaviour
         yield return this.mapPointToEdge(new Vector2(coords.x - 0.5f, coords.y));
     }
 
-    private bool isOnLine(Vector2 point)
-    {
-        return (Mathf.Abs(point.x - this.originalPoint.x) < Mathf.Pow(10, -3)) || (Mathf.Abs(point.y - this.originalPoint.y) < Mathf.Pow(10, -3));
-    }
-
     private void readyToMove()
     {
         if (this.path.Count == 0)
         {
-            int playerMask = ~(1 << 8);
-
-            ArrayList options = new ArrayList();
+            List<(int, int)> options = new List<(int, int)>();
             for (int x = -1; x <= 1; x++)
             {
                 for (int y = -1; y <= 1; y++)
                 {
-                    if (canMove(this.transform.position, new Vector3((float)x, (float)y, 0), playerMask))
+                    if (x == 0 && y == 0) continue;
+                    if (canMove(x, y))
                     {
                         options.Add((x, y));
                     }
                 }
             }
+            // UnityEngine.Debug.Log(options.Count);
 
             if (options.Count == 0)
             {
-                Debug.Break();
-                Application.Quit();
+                this.findBlockNotTraveled();
+
+                if (this.currMode == Mode.Failed)
+                {
+                    return;
+                }
+
+                Vector2 location = this.mapBlockToCoordinates(this.path.Peek()) - new Vector2(this.transform.position.x, this.transform.position.y);
+
+                float xDir = (float)Math.Cos(this.lookingDirection * Mathf.Deg2Rad);
+                float yDir = (float)Math.Sin(this.lookingDirection * Mathf.Deg2Rad);
+                Vector3 angle = new Vector3(xDir, yDir, 0);
+
+                this.rotationAmountBeforeMove = Vector2.SignedAngle(angle, location);
+
+                // UnityEngine.Debug.Log($"{this.lookingDirection} {angle} {location} {this.rotationAmountBeforeMove}");
+                this.moveRotation = (this.rotationAmountBeforeMove > 0) ? 45 : -45;
+                this.currMoveRotation = 0f;
+                this.currMode = Mode.RotateToMove;
             }
+            else
+            {
+                (int, int) tup = options[Mathf.FloorToInt(UnityEngine.Random.value * options.Count)];
 
-            (int, int) tup = ((int, int))options[this.random.Next(0, options.Count)];
+                // UnityEngine.Debug.Log(tup);
 
-            float xDiff = (float)tup.Item1;
-            float yDiff = (float)tup.Item2;
-            Vector3 dir = new Vector3(xDiff, yDiff, 0);
+                float xDiff = (float)tup.Item1;
+                float yDiff = (float)tup.Item2;
+                Vector3 dir = new Vector3(xDiff, yDiff, 0);
 
-            float xDir = (float)Math.Cos(this.lookingDirection * Mathf.Deg2Rad);
-            float yDir = (float)Math.Sin(this.lookingDirection * Mathf.Deg2Rad);
-            Vector3 angle = new Vector3(xDir, yDir, 0);
+                Vector3 angle = this.myDirectionVector();
 
-            this.rotationAmountBeforeMove = Vector2.SignedAngle(angle, dir);
-            this.moveRotation = (this.rotationAmountBeforeMove > 0) ? 45 : -45;
-            this.currMoveRotation = 0f;
+                this.rotationAmountBeforeMove = Vector2.SignedAngle(angle, dir);
+                this.moveRotation = (this.rotationAmountBeforeMove > 0) ? 45 : -45;
+                this.currMoveRotation = 0f;
+                this.currMode = Mode.RotateToMove;
+            }
         }
         else
         {
@@ -1517,40 +1726,109 @@ public class TileSeeker : MonoBehaviour
 
             this.rotationAmountBeforeMove = Vector2.SignedAngle(angle, location);
 
-            // Debug.Log($"{this.lookingDirection} {angle} {location} {this.rotationAmountBeforeMove}");
+            // UnityEngine.Debug.Log($"{this.lookingDirection} {angle} {location} {this.rotationAmountBeforeMove}");
             this.moveRotation = (this.rotationAmountBeforeMove > 0) ? 45 : -45;
             this.currMoveRotation = 0f;
+            this.currMode = Mode.RotateToMove;
         }
     }
 
-    private bool canMove(Vector3 currPosition, Vector3 dir, int mask)
+    private void findBlockNotTraveled()
     {
-        RaycastHit2D hit = Physics2D.Raycast(currPosition, dir, dir.magnitude, mask);
-        bool bothZero = Vector3.Distance(dir, Vector3.zero) < Mathf.Pow(10, -3);
-        bool hasMoved;
-        Vector2 newPos = new Vector2(currPosition.x, currPosition.y) + new Vector2(dir.x, dir.y);
-        bool res = this.locationMap.TryGetValue(this.mapCoordinatesToBlock(newPos), out hasMoved);
-        if (res)
+        List<int> blockSpace = new List<int>();
+        foreach (int i in EnumerableUtility.Range(0, this.rows * this.cols))
         {
-            return (hit.collider == null && !bothZero && !hasMoved);
+            if (this.removedBlocks.Contains(i) || this.locationMap[i])
+            {
+                continue;
+            }
+            blockSpace.Add(i);
         }
-        return false;
+        if (blockSpace.Count == 0)
+        {
+            this.currMode = Mode.Failed;
+            return;
+        }
+        int randBlock = blockSpace[Mathf.FloorToInt(UnityEngine.Random.value * blockSpace.Count)];
+        this.generatePath(this.mapCoordinatesToBlock(this.transform.position), randBlock);
+        bool hasPath = (this.path.Count != 0);
+
+        int numTries = 0;
+        int maxTries = this.rows * this.cols;
+        while (!hasPath)
+        {
+            numTries++;
+            if (numTries > maxTries)
+            {
+                this.currMode = Mode.Failed;
+                return;
+            }
+            randBlock = blockSpace[Mathf.FloorToInt(UnityEngine.Random.value * blockSpace.Count)];
+            this.generatePath(this.mapCoordinatesToBlock(this.transform.position), randBlock);
+            hasPath = (this.path.Count != 0);
+        }
+    }
+
+    private bool canMove(int x, int y)
+    {
+        Vector3 dir = new Vector3(x, y, 0);
+        RaycastHit2D hit = this.raycast(dir, dir.magnitude);
+        bool bothZero = Vector3.Distance(dir, Vector3.zero) < Mathf.Pow(10, -3);
+        bool hasMoved = true;
+        Vector2 newPos = this.transform.position + dir;
+
+        float negativeY = this.originPoint.y - rows;
+        float positiveY = this.originPoint.y;
+
+        float positiveX = cols - this.originPoint.x;
+        float negativeX = -this.originPoint.x;
+        if (newPos.x < negativeX || newPos.x > positiveX || newPos.y < negativeY || newPos.y > positiveY)
+        {
+            return false;
+        }
+
+        int newBlock = this.mapCoordinatesToBlock(newPos);
+        // UnityEngine.Debug.Log($"{newPos} => {newBlock}");
+        bool res = this.locationMap.TryGetValue(newBlock, out hasMoved);
+
+        bool onWall = this.isPointWithinCollider(this.innerWallCollider, newPos);
+        // UnityEngine.Debug.Log($"{newBlock}: Has moved: {hasMoved}, Both zero: {bothZero}, On wall: {onWall}");
+
+        return (hit.collider == null && !bothZero && !hasMoved && !onWall);
     }
 
     private void move()
     {
         this.markInMyDirection();
+        float negativeY = this.originPoint.y - rows;
+        float positiveY = this.originPoint.y;
+
+        float positiveX = cols - this.originPoint.x;
+        float negativeX = -this.originPoint.x;
+
         if (this.path.Count == 0)
         {
-            this.transform.position = this.transform.position + this.movement();
+            Vector3 newLocation = this.transform.position + this.movement();
+            // UnityEngine.Debug.Log(newLocation);
+            bool outside = (newLocation.x < negativeX || newLocation.x > positiveX || newLocation.y < negativeY || newLocation.y > positiveY);
+
+            if (outside || this.removedBlocks.Contains(this.mapCoordinatesToBlock(newLocation)) || this.isPointWithinCollider(this.innerWallCollider, newLocation))
+            {
+                this.findBlockNotTraveled();
+                // UnityEngine.Debug.Log($"Path count: {this.path.Count}");
+                return;
+            }
+            this.transform.position = newLocation;
         }
         else
         {
             int nextBlock = this.path.Pop();
             Vector2 location = this.mapBlockToCoordinates(nextBlock);
-            if (this.removedBlocks.Contains(nextBlock))
+
+            bool outside = (location.x < negativeX || location.x > positiveX || location.y < negativeY || location.y > positiveY);
+            if (outside || this.removedBlocks.Contains(nextBlock) || this.isPointWithinCollider(this.innerWallCollider, location))
             {
-                // Debug.Log("Editing path ...");
+                // UnityEngine.Debug.Log("Editing path ...");
                 this.removeBlockFromGraph(nextBlock);
                 this.generatePath(this.mapCoordinatesToBlock(this.transform.position), this.goalBlock);
                 return;
@@ -1571,7 +1849,7 @@ public class TileSeeker : MonoBehaviour
 
     private void rotateToMove()
     {
-        if (Mathf.Round(Mathf.Abs(this.currMoveRotation - this.rotationAmountBeforeMove)) < Math.Pow(10, -3))
+        if (Mathf.Abs(this.currMoveRotation) >= Mathf.Abs(this.rotationAmountBeforeMove))
         {
             this.markInMyDirection();
             this.currMode = Mode.Move;
@@ -1604,12 +1882,12 @@ public class TileSeeker : MonoBehaviour
     {
         bool res = false;
 
-        ArrayList points = this.generatePointsOnPath(position, hit, direction);
+        List<Vector2> points = this.generatePointsOnPath(position, hit, direction);
 
-        // Debug.Log("Points:");
+        // UnityEngine.Debug.Log("Points:");
         // foreach (Vector2 vec in points)
         // {
-        //     Debug.Log($"{vec} {this.mapPointToEdge(vec)}");
+        //     UnityEngine.Debug.Log($"{vec} {this.mapPointToEdge(vec)}");
         // }
 
         if (points.Count == 0)
@@ -1627,7 +1905,7 @@ public class TileSeeker : MonoBehaviour
 
         if (this.isOnInnerWall(point0))
         {
-            // Debug.Log("Wall!");
+            // UnityEngine.Debug.Log($"Wall! {first}");
             // first one is a wall!
             if (firstX == firstY)
             {
@@ -1646,6 +1924,7 @@ public class TileSeeker : MonoBehaviour
 
         if (firstX == firstY)
         {
+            // UnityEngine.Debug.Log($"Hit of diag: {hit}");
             // we got a diagonal
             int size = points.Count - 1;
             for (i = 0; i < size; i++)
@@ -1661,9 +1940,9 @@ public class TileSeeker : MonoBehaviour
             for (; i < size; i++)
             {
                 Vector2 vec = (Vector2)points[i];
-                // Debug.Log(vec);
+                // UnityEngine.Debug.Log(vec);
                 Vector2 mapped = this.mapPointToEdge(vec);
-                // Debug.Log(mapped);
+                // UnityEngine.Debug.Log(mapped);
                 this.classifyEdge(mapped, Vector2.one, direction, false, false);
             }
         }
@@ -1673,21 +1952,19 @@ public class TileSeeker : MonoBehaviour
 
     private bool isOnInnerWall(Vector2 point)
     {
-        float negativeY = rows - this.originPoint.y;
+        float negativeY = this.originPoint.y - rows;
         float positiveY = this.originPoint.y;
 
         float positiveX = cols - this.originPoint.x;
-        float negativeX = this.originPoint.x;
-        bool yOnOuterWall = (Mathf.Abs(point.y - positiveY) < Mathf.Pow(10, -3)) || (Mathf.Abs(point.y + negativeY) < Mathf.Pow(10, -3));
-        bool xOnOuterWall = (Mathf.Abs(point.x - positiveX) < Mathf.Pow(10, -3)) || (Mathf.Abs(point.x + negativeX) < Mathf.Pow(10, -3));
+        float negativeX = -this.originPoint.x;
 
-        return !xOnOuterWall && !yOnOuterWall;
+        return (point.x > negativeX && point.x < positiveX && point.y > negativeY && point.y < positiveY);
     }
 
-    private ArrayList generatePointsOnPath(Vector2 position, Vector2 hit, Vector2 direction)
+    private List<Vector2> generatePointsOnPath(Vector2 position, Vector2 hit, Vector2 direction)
     {
-        // Debug.Log($"({position.x}, {position.y}) -> ({hit.x}, {hit.y}), {direction}");
-        ArrayList points = new ArrayList();
+        // UnityEngine.Debug.Log($"({position.x}, {position.y}) -> ({hit.x}, {hit.y}), {direction}");
+        List<Vector2> points = new List<Vector2>();
         if (Mathf.Abs(direction.y) < Mathf.Pow(10, -3))
         {
             if (direction.x > 0)
@@ -1745,7 +2022,7 @@ public class TileSeeker : MonoBehaviour
             float xStart = -this.originPoint.x;
             float xEnd = cols - this.originPoint.x;
 
-            float yStart = -(rows - this.originPoint.y);
+            float yStart = this.originPoint.y - rows;
             float yEnd = this.originPoint.y;
             for (float x = xStart; x <= xEnd; x++)
             {
@@ -1811,7 +2088,7 @@ public class TileSeeker : MonoBehaviour
         return points;
     }
 
-    private void sortPoints(ArrayList points, Vector2 direction)
+    private void sortPoints(List<Vector2> points, Vector2 direction)
     {
         // not actually too complex since all y's have distinct x's
         if (direction.y > 0)
@@ -1902,8 +2179,6 @@ public class TileSeeker : MonoBehaviour
             float epsilon = 45f + Mathf.Pow(10, -3);
             if (diag)
             {
-                int playerMask = ~(1 << 8);
-
                 Map curr = this.edges[x, y];
 
                 float node = Mathf.Round(x);
@@ -1925,7 +2200,7 @@ public class TileSeeker : MonoBehaviour
                     float yDir = (float)Math.Sin((this.lookingDirection + CORNERUPDATEPOSITIVE) * Mathf.Deg2Rad);
                     Vector3 direction = new Vector3(xDir, yDir, 0);
 
-                    RaycastHit2D hit = Physics2D.Raycast(this.transform.position, direction, Mathf.Infinity, playerMask);
+                    RaycastHit2D hit = this.raycast(direction);
 
                     this.markEdges(this.transform.position, hit.point, direction);
                 }
@@ -1935,7 +2210,7 @@ public class TileSeeker : MonoBehaviour
                     float yDir = (float)Math.Sin((this.lookingDirection + CORNERUPDATENEGATIVE) * Mathf.Deg2Rad);
                     Vector3 direction = new Vector3(xDir, yDir, 0);
 
-                    RaycastHit2D hit = Physics2D.Raycast(this.transform.position, direction, Mathf.Infinity, playerMask);
+                    RaycastHit2D hit = this.raycast(direction);
 
                     this.markEdges(this.transform.position, hit.point, direction);
                 }
@@ -1945,7 +2220,7 @@ public class TileSeeker : MonoBehaviour
                     float yDir = (float)Math.Sin((this.lookingDirection + CORNERUPDATEPOSITIVE) * Mathf.Deg2Rad);
                     Vector3 direction = new Vector3(xDir, yDir, 0);
 
-                    RaycastHit2D hit = Physics2D.Raycast(this.transform.position, direction, Mathf.Infinity, playerMask);
+                    RaycastHit2D hit = this.raycast(direction);
 
                     this.markEdges(this.transform.position, hit.point, direction);
                 }
@@ -1955,7 +2230,7 @@ public class TileSeeker : MonoBehaviour
                     float yDir = (float)Math.Sin((this.lookingDirection + CORNERUPDATENEGATIVE) * Mathf.Deg2Rad);
                     Vector3 direction = new Vector3(xDir, yDir, 0);
 
-                    RaycastHit2D hit = Physics2D.Raycast(this.transform.position, direction, Mathf.Infinity, playerMask);
+                    RaycastHit2D hit = this.raycast(direction);
 
                     this.markEdges(this.transform.position, hit.point, direction);
                 }
@@ -1971,7 +2246,7 @@ public class TileSeeker : MonoBehaviour
             else
             {
                 this.drawEdge(this.mapEdge(x, y), Color.red);
-                // Debug.Log($"X: {x}, Y: {y}");
+                // UnityEngine.Debug.Log($"X: {x}, Y: {y}");
                 this.edges[x, y] = Map.InnerWall;
                 this.edges[y, x] = Map.InnerWall;
 
@@ -2005,11 +2280,14 @@ public class TileSeeker : MonoBehaviour
 
         if (diag)
         {
-            ArrayList edges = this.edgesOnDiag(edgeOne.x, edgeTwo.x);
+            // UnityEngine.Debug.Log($"Original point: {edgeOne.x}, {edgeTwo.x}");
+            List<Vector2> edges = this.edgesOnDiag(edgeOne.x, edgeTwo.x);
             foreach (Vector2 vec in edges)
             {
                 int x = Mathf.RoundToInt(vec.x);
                 int y = Mathf.RoundToInt(vec.y);
+
+                // UnityEngine.Debug.Log($"X: {x}, Y: {y}");
 
                 Map curr = this.edges[x, y];
 
@@ -2024,18 +2302,18 @@ public class TileSeeker : MonoBehaviour
                         this.drawEdge(this.mapEdge(x, y), Color.red);
                         break;
                     case Map.Unknown:
-                        (Vector2 one, Vector2 two) = this.mapEdge(vec.x, vec.y);
-                        if (Mathf.Abs(one.y - two.y) < Mathf.Pow(10, -3))
-                        {
-                            // on the same horizontal line
-                            float xCurr = (one.x + two.x) / 2;
-                            float yCurr = (one.y + two.y) / 2;
-                            Vector3 faceDirection = new Vector3(xCurr, yCurr, 0) - this.transform.position;
+                        // (Vector2 one, Vector2 two) = this.mapEdge(vec.x, vec.y);
+                        // if (Mathf.Abs(one.y - two.y) < Mathf.Pow(10, -3))
+                        // {
+                        //     // on the same horizontal line
+                        //     float xCurr = (one.x + two.x) / 2;
+                        //     float yCurr = (one.y + two.y) / 2;
+                        //     Vector3 faceDirection = new Vector3(xCurr, yCurr, 0) - this.transform.position;
 
-                            int playerMask = ~(1 << 8);
-                            RaycastHit2D hit = Physics2D.Raycast(this.transform.position, faceDirection, Mathf.Infinity, playerMask);
-                            this.markEdges(this.transform.position, hit.point, faceDirection);
-                        }
+                        //     int playerMask = ~(1 << 8);
+                        //     RaycastHit2D hit = Physics2D.Raycast(this.transform.position, faceDirection, Mathf.Infinity, playerMask);
+                        //     this.markEdges(this.transform.position, hit.point, faceDirection);
+                        // }
                         // this.drawEdge(this.mapEdge(x, y), Color.green);
                         // this.edges[x, y] = Map.Seen;
                         // this.edges[y, x] = Map.Seen;
@@ -2076,11 +2354,16 @@ public class TileSeeker : MonoBehaviour
 
     private void removeBlockFromGraph(int block)
     {
+        if (block < 0 || block >= this.cols * this.rows)
+        {
+            return;
+        }
+
         if (this.removedBlocks.Contains(block))
         {
             return;
         }
-        // Debug.Log($"Removing {block}");
+        // UnityEngine.Debug.Log($"Removing {block}");
         this.removedBlocks.Add(block);
         if (!(EnumerableUtility.Range(0, rows * cols - cols + 1, cols).Contains(block)))
         {
@@ -2139,9 +2422,9 @@ public class TileSeeker : MonoBehaviour
         }
     }
 
-    private ArrayList edgesOnDiag(float nodeOne, float nodeTwo)
+    private List<Vector2> edgesOnDiag(float nodeOne, float nodeTwo)
     {
-        ArrayList res = new ArrayList();
+        List<Vector2> res = new List<Vector2>();
         int lowNode = Mathf.RoundToInt(Mathf.Min(nodeOne, nodeTwo));
         int highNode = Mathf.RoundToInt(Mathf.Max(nodeOne, nodeTwo));
         if (Mathf.Abs(highNode - lowNode - (cols + 2)) < Mathf.Pow(10, -3))
@@ -2194,7 +2477,7 @@ public class TileSeeker : MonoBehaviour
 
         if (xInt && yInt)
         {
-            // Debug.Log("Both zero");
+            // UnityEngine.Debug.Log("Both zero");
             // we have a corner situation here
             float col = point.x + this.originPoint.x;
             float row = -point.y + this.originPoint.y;
@@ -2203,7 +2486,7 @@ public class TileSeeker : MonoBehaviour
         }
         else if (xInt)
         {
-            // Debug.Log("X Zero");
+            // UnityEngine.Debug.Log("X Zero");
             float col = point.x + this.originPoint.x;
             float lowRow = Mathf.Min(-Mathf.Floor(point.y) + this.originPoint.y, -Mathf.Ceil(point.y) + this.originPoint.y);
             float highRow = Mathf.Max(-Mathf.Floor(point.y) + this.originPoint.y, -Mathf.Ceil(point.y) + this.originPoint.y);
@@ -2213,7 +2496,7 @@ public class TileSeeker : MonoBehaviour
         }
         else if (yInt)
         {
-            // Debug.Log("Y Zero");
+            // UnityEngine.Debug.Log("Y Zero");
             float row = -point.y + this.originPoint.y;
             float lowCol = Mathf.Min(Mathf.Floor(point.x) + this.originPoint.x, Mathf.Ceil(point.x) + this.originPoint.x);
             float highCol = Mathf.Max(Mathf.Floor(point.x) + this.originPoint.x, Mathf.Ceil(point.x) + this.originPoint.x);
@@ -2265,6 +2548,11 @@ public class TileSeeker : MonoBehaviour
 
     private void drawEdge((Vector2, Vector2) points, Color color)
     {
+        if (!this.debug)
+        {
+            return;
+        }
+
         (Vector2 one, Vector2 two) = points;
         Vector3 start = new Vector3(one.x, one.y, 100);
         Vector3 end = new Vector3(two.x, two.y, 100);
@@ -2277,7 +2565,7 @@ public class TileSeeker : MonoBehaviour
         {
             return;
         }
-        // Debug.DrawLine(start, end, color, 1000f);
+        UnityEngine.Debug.DrawLine(start, end, color, 1000f);
     }
 
     private Vector2 mapBlockToCoordinates(int blockNumber)
