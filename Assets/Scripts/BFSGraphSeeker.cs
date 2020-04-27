@@ -125,6 +125,50 @@ public class BFSGraphSeeker : MonoBehaviour
             return;
         }
 
+        if (this.watch.ElapsedMilliseconds > 1000 * 60 * 1)
+        {
+            // if game has been running for more than a minute, it's probably stuck!
+            this.currMode = Mode.Failed;
+        }
+
+        Vector2 position = this.transform.position;
+        float newX = Mathf.Round(position.x * 2) / 2;
+        float newY = Mathf.Round(position.y * 2) / 2;
+
+        float xAbs = Mathf.Abs(position.x - newX);
+        float yAbs = Mathf.Abs(position.y - newY);
+        if (xAbs >= Mathf.Pow(10, -3) || yAbs >= Mathf.Pow(10, -3))
+        {
+            // UnityEngine.Debug.Log($"({position.x}, {xSub}, {xAbs}) - ({position.y}, {ySub}, {yAbs})");
+            this.transform.position = new Vector3(newX, newY, 0);
+        }
+
+        float negativeY = this.originPoint.y - rows;
+        float positiveY = this.originPoint.y;
+        float positiveX = cols - this.originPoint.x;
+        float negativeX = -this.originPoint.x;
+
+        position = this.transform.position;
+        newY = position.y;
+        newX = position.x;
+        if (position.y < negativeY)
+        {
+            newY = negativeY + 0.5f;
+        }
+        if (position.y > positiveY)
+        {
+            newY = positiveY - 0.5f;
+        }
+        if (position.x < negativeX)
+        {
+            newX = negativeX + 0.5f;
+        }
+        if (position.x > positiveX)
+        {
+            newX = positiveX - 0.5f;
+        }
+        this.transform.position = new Vector3(newX, newY, 0);
+
         if (this.isPointWithinHiderCollider(this.transform.position))
         {
             this.currMode = Mode.FoundHider;

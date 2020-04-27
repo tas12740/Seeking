@@ -278,23 +278,60 @@ public class TileSeeker : MonoBehaviour
             return;
         }
 
-        if (this.watch.ElapsedMilliseconds > 1000 * 60 * 5)
+        if (this.watch.ElapsedMilliseconds > 1000 * 60 * 1)
         {
-            // if game has been running for more than five minutes, it's probably stuck!
+            // if game has been running for more than a minute, it's probably stuck!
             this.currMode = Mode.Failed;
         }
 
         Vector2 position = this.transform.position;
-        float xSub = Mathf.Floor(position.x);
-        float ySub = Mathf.Floor(position.y);
-        float xAbs = Mathf.Abs(position.x - xSub - 0.5f);
-        float yAbs = Mathf.Abs(position.y - ySub - 0.5f);
+        float newX = Mathf.Round(position.x * 2) / 2;
+        float newY = Mathf.Round(position.y * 2) / 2;
+
+        float xAbs = Mathf.Abs(position.x - newX);
+        float yAbs = Mathf.Abs(position.y - newY);
         if (xAbs >= Mathf.Pow(10, -3) || yAbs >= Mathf.Pow(10, -3))
         {
             // UnityEngine.Debug.Log($"({position.x}, {xSub}, {xAbs}) - ({position.y}, {ySub}, {yAbs})");
-            float xPos = xSub + 0.5f;
-            float yPos = ySub + 0.5f;
-            this.transform.position = new Vector3(xPos, yPos, 0);
+            this.transform.position = new Vector3(newX, newY, 0);
+        }
+
+        float negativeY = this.originPoint.y - rows;
+        float positiveY = this.originPoint.y;
+        float positiveX = cols - this.originPoint.x;
+        float negativeX = -this.originPoint.x;
+
+        position = this.transform.position;
+        newY = position.y;
+        newX = position.x;
+        if (position.y < negativeY)
+        {
+            newY = negativeY + 0.5f;
+        }
+        if (position.y > positiveY)
+        {
+            newY = positiveY - 0.5f;
+        }
+        if (position.x < negativeX)
+        {
+            newX = negativeX + 0.5f;
+        }
+        if (position.x > positiveX)
+        {
+            newX = positiveX - 0.5f;
+        }
+        this.transform.position = new Vector3(newX, newY, 0);
+
+        if (this.isPointWithinCollider(this.innerWallCollider, this.transform.position))
+        {
+            // cheat ...
+            int nextBlock = this.findBlockNotTraveled();
+            if (nextBlock == -1) this.currMode = Mode.Failed;
+            else
+            {
+                this.transform.position = this.mapBlockToCoordinates(nextBlock);
+                this.currMode = Mode.ReadyToScan;
+            }
         }
 
         if (this.isPointWithinHiderCollider(this.transform.position))
@@ -1733,7 +1770,7 @@ public class TileSeeker : MonoBehaviour
         }
     }
 
-    private void findBlockNotTraveled()
+    private int findBlockNotTraveled()
     {
         List<int> blockSpace = new List<int>();
         foreach (int i in EnumerableUtility.Range(0, this.rows * this.cols))
@@ -1747,26 +1784,31 @@ public class TileSeeker : MonoBehaviour
         if (blockSpace.Count == 0)
         {
             this.currMode = Mode.Failed;
-            return;
+            return -1;
         }
-        int randBlock = blockSpace[Mathf.FloorToInt(UnityEngine.Random.value * blockSpace.Count)];
+        int randIdx = Mathf.FloorToInt(UnityEngine.Random.value * blockSpace.Count);
+        int randBlock = blockSpace[randIdx];
         this.generatePath(this.mapCoordinatesToBlock(this.transform.position), randBlock);
+
+        blockSpace.RemoveAt(randIdx);
         bool hasPath = (this.path.Count != 0);
 
-        int numTries = 0;
-        int maxTries = this.rows * this.cols;
-        while (!hasPath)
+        while (!hasPath && blockSpace.Count > 0)
         {
-            numTries++;
-            if (numTries > maxTries)
-            {
-                this.currMode = Mode.Failed;
-                return;
-            }
-            randBlock = blockSpace[Mathf.FloorToInt(UnityEngine.Random.value * blockSpace.Count)];
+            randIdx = Mathf.FloorToInt(UnityEngine.Random.value * blockSpace.Count);
+            randBlock = blockSpace[randIdx];
+            blockSpace.RemoveAt(randIdx);
             this.generatePath(this.mapCoordinatesToBlock(this.transform.position), randBlock);
             hasPath = (this.path.Count != 0);
         }
+        if (blockSpace.Count == 0)
+        {
+            if (hasPath) return randBlock;
+
+            this.currMode = Mode.Failed;
+            return -1;
+        }
+        return randBlock;
     }
 
     private bool canMove(int x, int y)
@@ -1809,8 +1851,9 @@ public class TileSeeker : MonoBehaviour
         if (this.path.Count == 0)
         {
             Vector3 newLocation = this.transform.position + this.movement();
-            // UnityEngine.Debug.Log(newLocation);
+
             bool outside = (newLocation.x < negativeX || newLocation.x > positiveX || newLocation.y < negativeY || newLocation.y > positiveY);
+            UnityEngine.Debug.Log($"{newLocation} - {outside}");
 
             if (outside || this.removedBlocks.Contains(this.mapCoordinatesToBlock(newLocation)) || this.isPointWithinCollider(this.innerWallCollider, newLocation))
             {
